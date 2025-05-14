@@ -1,0 +1,101 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 區塊鏈提供者指南
+
+本文檔說明了如何在系統中添加和配置新的區塊鏈提供者。
+
+## 架構概述
+
+我們的系統使用抽象工廠模式和動態模組載入機制，使得添加新的區塊鏈提供者變得非常簡單。主要組件包括：
+
+1. [`BlockchainProvider`](mdc:src/providers/blockchain/blockchain-provider.interface.ts) 接口 - 定義所有提供者必須實現的方法
+2. [`AlchemyBaseProvider`](mdc:src/providers/alchemy/alchemy-base.provider.ts) - Alchemy 提供者的基礎抽象類
+3. [`BlockchainProviderFactory`](mdc:src/providers/blockchain/blockchain-provider.factory.ts) - 管理和提供區塊鏈提供者的工廠類
+4. [`BlockchainModule`](mdc:src/providers/blockchain/blockchain.module.ts) - 負責動態註冊和提供提供者的 Nest.js 模組
+
+## 添加新的區塊鏈提供者
+
+### 步驟 1: 實現提供者類
+
+首先，創建一個新的提供者類，繼承自 `AlchemyBaseProvider` 或直接實現 `BlockchainProvider` 接口。
+
+示例：添加 Polygon 區塊鏈提供者，見 [`AlchemyPolygonProvider`](mdc:src/providers/alchemy/alchemy-polygon.provider.ts)。
+
+### 步驟 2: 在常量文件中添加新的鏈類型
+
+在 [`blockchain.constants.ts`](mdc:src/providers/blockchain/blockchain.constants.ts) 中添加新的鏈類型：
+
+```typescript
+export enum StandardChainType {
+  ETHEREUM = 'ethereum',
+  SOLANA = 'solana',
+  POLYGON = 'polygon', // 添加新的鏈類型
+  // ...其他鏈
+}
+```
+
+### 步驟 3: 註冊提供者
+
+有兩種方式註冊新的提供者：
+
+#### 方式 1: 通過 BlockchainModule.register() 方法
+
+```typescript
+// src/app.module.ts 或任何其他模塊
+@Module({
+  imports: [
+    BlockchainModule.register([
+      {
+        provide: 'polygon',
+        useClass: AlchemyPolygonProvider,
+      },
+    ]),
+    // ...其他模塊
+  ],
+})
+export class AppModule {}
+```
+
+#### 方式 2: 手動註冊到工廠
+
+```typescript
+// 在任何需要的服務中
+@Injectable()
+export class AppService {
+  constructor(
+    private readonly blockchainProviderFactory: BlockchainProviderFactory,
+    private readonly configService: ConfigService,
+  ) {
+    // 手動註冊 Polygon 提供者
+    const polygonProvider = new AlchemyPolygonProvider(this.configService);
+    this.blockchainProviderFactory.registerProvider('polygon', polygonProvider);
+  }
+}
+```
+
+### 步驟 4: 添加環境變數
+
+在 `.env` 文件中添加新的 API 密鑰。
+
+### 步驟 5: 使用新的提供者
+
+查看示例： [`EthereumService`](mdc:src/chains/ethereum/ethereum.service.ts) 和 [`SolanaService`](mdc:src/chains/solana/solana.service.ts)。
+
+## 提供者實現檢查清單
+
+確保您的提供者實現了以下方法：
+
+- `getBaseUrl(networkType?)`: 獲取 API 基本 URL
+- `getChainConfig()`: 獲取鏈配置
+- `getApiKey(networkType?)`: 獲取 API 密鑰
+- `getBalances(address, networkType?)`: 獲取餘額
+- `isSupported()`: 檢查提供者是否被支持
+
+## 故障排除
+
+- 如果提供者未被正確註冊，檢查 imports 和 exports
+- 如果 API 調用失敗，檢查 API 密鑰和 URL
+- 如果返回的數據格式不正確，檢查轉換邏輯
