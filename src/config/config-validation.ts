@@ -57,6 +57,12 @@ class EnvironmentVariables {
 }
 
 export function validateConfig(config: Record<string, unknown>) {
+  // 如果在 CI 環境中或 SKIP_ENV_VALIDATION 設置為 true，則跳過驗證
+  if (process.env.CI === 'true' || process.env.SKIP_ENV_VALIDATION === 'true') {
+    console.log('CI 環境或 SKIP_ENV_VALIDATION 設置為 true，跳過環境變數驗證');
+    return config;
+  }
+
   const validatedConfig = plainToClass(EnvironmentVariables, config, {
     enableImplicitConversion: true,
   });

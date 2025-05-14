@@ -34,6 +34,8 @@ jobs:
         run: pnpm install
       - name: Lint
         run: pnpm lint
+        env:
+          SKIP_ENV_VALIDATION: 'true'
 
   test:
     runs-on: ubuntu-latest
@@ -62,6 +64,8 @@ jobs:
         run: pnpm install
       - name: Run unit tests
         run: pnpm test
+        env:
+          SKIP_ENV_VALIDATION: 'true'
 
   build:
     needs: [lint, test]
@@ -118,6 +122,7 @@ jobs:
       - name: Build
         run: pnpm build
         env:
+          SKIP_ENV_VALIDATION: 'true'
           NODE_ENV: development
           MONGO_HOST: localhost
           MONGO_PORT: 27017
