@@ -43,41 +43,84 @@ OneKeyBalanceKit 實現了三層快取策略，用於優化區塊鏈資產餘額
 
 # 快取策略
 
-本專案使用多層快取策略來處理區塊鏈數據，提高應用響應速度並減少對外部 API 的請求次數。
+本項目實現了靈活的快取策略，支援記憶體快取和 Redis 快取。
 
-## 快取層級
+## 快取服務概述
 
-1. **記憶體快取**：短期存儲，適用於高頻訪問數據
-2. **Redis 快取**：中期存儲，適用於跨實例共享的數據
-3. **資料庫快取**：長期存儲，適用於歷史數據分析
+[CacheService](mdc:src/core/cache/cache.service.ts) 提供了一個通用的快取介面，能夠根據配置自動切換快取存儲方式。
 
-## 快取策略實現
+核心特性：
+- 自動偵測並使用 Redis（若可用）或降級為記憶體快取
+- 支援 TTL（存活時間）設定
+- 提供模式化的快取刪除功能（僅適用於 Redis）
+- 全面的錯誤處理與日誌記錄
 
-快取邏輯應在服務層實現，而不是控制器層。這樣可以確保相同的業務邏輯在不同入口點被調用時都能享受到快取優勢。
+## 使用方法
 
-```typescript
-// 推薦的快取模式示例
-async function getAddressBalance(address: string, useCache = true): Promise<BalanceInfo> {
-  // 生成一個唯一的快取鍵
-  const cacheKey = `balance:${address}`;
-  
-  // 如果允許使用快取，先嘗試從快取獲取
-  if (useCache) {
-    const cachedData = await this.cacheManager.get(cacheKey);
-    if (cachedData) {
-      return cachedData;
-    }
-  }
-  
-  // 快取未命中或不允許使用快取，從區塊鏈獲取數據
-  const balance = await this.blockchainProvider.getBalance(address);
-  
-  // 將結果存入快取，設置過期時間
-  await this.cacheManager.set(cacheKey, balance, { ttl: 300 }); // 5分鐘過期
-  
-  return balance;
-}
-```
+1. **注入快取服務**：
+   ```typescript
+   constructor(private readonly cacheService: CacheService) {}
+   ```
+
+2. **快取操作**：
+   ```typescript
+   // 存儲資料（帶 TTL）
+   await this.cacheService.set('your-key', data, 3600); // TTL 為 3600 秒
+   
+   // 讀取資料
+   const data = await this.cacheService.get<YourType>('your-key');
+   
+   // 刪除快取
+   await this.cacheService.delete('your-key');
+   
+   // 批次刪除（Redis 模式）
+   await this.cacheService.deleteByPattern('prefix:*');
+   ```
+
+3. **檢查快取類型**：
+   ```typescript
+   const cacheType = this.cacheService.getCacheType(); // 'Redis' 或 'Memory'
+   ```
+
+## 最佳實踐
+
+1. **使用有意義的鍵名前綴**：
+   ```typescript
+   const key = `user:${userId}:profile`;
+   ```
+
+2. **根據資料特性設定適當的 TTL**：
+   - 頻繁變動的資料：短 TTL（幾秒到幾分鐘）
+   - 半靜態資料：中等 TTL（幾小時到一天）
+   - 靜態參考資料：長 TTL（幾天到幾週）
+
+3. **在關鍵更新後主動刪除快取**：
+   ```typescript
+   await updateUserProfile(userId, newData);
+   await this.cacheService.delete(`user:${userId}:profile`);
+   ```
+
+4. **使用模式刪除進行關聯清理**：
+   ```typescript
+   // 清除用戶的所有相關快取
+   await this.cacheService.deleteByPattern(`user:${userId}:*`);
+   ```
+
+5. **錯誤處理的優雅降級**：
+   ```typescript
+   try {
+     const cachedData = await this.cacheService.get<Data>('key');
+     if (cachedData) return cachedData;
+     
+     // 快取未命中，從源頭獲取資料
+     const freshData = await this.dataService.getFreshData();
+     await this.cacheService.set('key', freshData, 3600);
+     return freshData;
+   } catch (err) {
+     // 快取服務出錯時，直接從資料源獲取
+     return this.dataService.getFreshData();
+   }
+   ```
 
 ## 快取過期策略
 

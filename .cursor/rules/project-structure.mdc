@@ -34,109 +34,70 @@ alwaysApply: false
 
 ## 專案結構
 
-本專案採用模組化的架構設計，特別是在 `src/chains` 目錄中實現了清晰的目錄結構和設計模式。
+本專案使用 NestJS 框架構建，採用模組化架構設計，具有清晰的目錄結構和職責分離。
 
-## 核心目錄結構
+## 主要目錄結構
 
 ```
 src/
-├── chains/                # 區塊鏈服務模組
-│   ├── interfaces/        # 介面定義
-│   ├── decorators/        # 裝飾器定義
-│   ├── services/          # 服務實現
-│   │   ├── ethereum/      # 以太坊特定服務
-│   │   └── solana/        # Solana 特定服務
-│   ├── controllers/       # API 控制器
-│   ├── modules/           # 模組定義
-│   └── constants/         # 常量定義
+├── main.ts                # 應用程式入口點
+├── app.module.ts          # 主應用模組
+├── app.controller.ts      # 主控制器
+├── app.service.ts         # 主服務
+├── config/                # 配置模組
 ├── core/                  # 核心功能模組
-├── providers/             # 通用提供者
-├── balances/              # 餘額服務模組
-└── webhook/               # Webhook 處理模組
+│   ├── cache/             # 快取服務
+│   ├── db/                # 資料庫連線與服務
+│   └── balance/           # 餘額核心服務
+├── chains/                # 區塊鏈服務模組
+│   ├── interfaces/        # 服務介面定義
+│   ├── decorators/        # 自定義裝飾器
+│   ├── services/          # 鏈服務實作
+│   ├── controllers/       # API 控制器
+│   └── modules/           # 子模組定義
+├── balances/              # 餘額查詢模組
+└── providers/             # 第三方服務提供者
 ```
 
-## Chains 模組設計
+## 模組化架構
 
-Chains 模組使用混合架構設計，結合了多種設計模式：
+專案遵循 NestJS 的模組化架構，主要包含以下幾個功能模組：
 
-1. **介面與抽象基類**：通過 `ChainService` 介面和 `AbstractChainService` 抽象基類定義統一的行為
-2. **工廠模式**：使用 `ChainServiceFactory` 管理和實例化不同的鏈服務
-3. **裝飾器自動發現**：使用 `@Chain()` 裝飾器和 `DiscoveryService` 自動註冊鏈服務
-4. **模組化組織**：每個鏈有自己的專用模組和服務實現
-5. **常量隔離**：鏈特定常量封裝在各自的目錄中
+1. **核心模組 (CoreModule)**
+   - 提供基礎服務如快取、資料庫連線等
+   - 其他模組依賴的共用功能
 
-## 關鍵文件說明
+2. **鏈服務模組 (ChainsModule)**
+   - 實現對不同區塊鏈的支援
+   - 統一的服務介面和工廠模式
 
-### 介面定義
+3. **餘額模組 (BalancesModule)**
+   - 處理資產餘額查詢請求
+   - 整合鏈服務獲取資產數據
 
-[interfaces/chain-service.interface.ts](mdc:src/chains/interfaces/chain-service.interface.ts) 定義了所有鏈服務必須實現的方法：
+4. **配置模組 (ConfigModule)**
+   - 管理應用程式配置
+   - 支援不同環境的配置載入
 
-```typescript
-export interface ChainService {
-  isValidAddress(address: string): boolean;
-  getAddressTransactionHashes(address: string): Promise<string[]>;
-  getTransactionDetails(hash: string): Promise<any>;
-  getChainName(): string;
-}
-```
+## 開發規範
 
-### 抽象基類
+在擴展或修改專案時，請遵循以下規範：
 
-[services/abstract-chain.service.ts](mdc:src/chains/services/abstract-chain.service.ts) 提供了基本實現和輔助方法：
+1. **保持模組化**
+   - 相關功能應歸類到適當的模組中
+   - 每個模組應有明確的職責邊界
 
-```typescript
-@Injectable()
-export abstract class AbstractChainService implements ChainService {
-  protected readonly logger = new Logger(this.constructor.name);
-  
-  abstract isValidAddress(address: string): boolean;
-  abstract getAddressTransactionHashes(address: string): Promise<string[]>;
-  abstract getTransactionDetails(hash: string): Promise<any>;
-  abstract getChainName(): string;
-  
-  // 日誌記錄輔助方法
-  protected logInfo(message: string): void {
-    this.logger.log(`[${this.getChainName()}] ${message}`);
-  }
-  
-  // 其他日誌方法...
-}
-```
+2. **依賴注入**
+   - 使用 NestJS 的依賴注入機制
+   - 避免直接實例化服務類
 
-### 工廠服務
+3. **統一錯誤處理**
+   - 使用 NestJS 的異常過濾器
+   - 保持一致的錯誤響應格式
 
-[services/chain-service.factory.ts](mdc:src/chains/services/chain-service.factory.ts) 負責創建和管理不同鏈的服務實例：
-
-```typescript
-@Injectable()
-export class ChainServiceFactory {
-  private readonly chainServices = new Map<string, ChainService>();
-  private readonly chainServiceTypes = new Map<string, Type<ChainService>>();
-  
-  // 獲取指定鏈的服務
-  getChainService(chainName: string): ChainService {
-    // 實現邏輯...
-  }
-  
-  // 獲取所有可用的鏈名稱
-  getAvailableChains(): string[] {
-    // 實現邏輯...
-  }
-  
-  // 其他方法...
-}
-```
-
-### 鏈特定服務
-
-[services/ethereum/ethereum.service.ts](mdc:src/chains/services/ethereum/ethereum.service.ts) 和 [services/solana/solana.service.ts](mdc:src/chains/services/solana/solana.service.ts) 分別實現對特定區塊鏈的支持。
-
-### 常量組織
-
-鏈特定常量被封裝在各自的常量文件中：
-
-- **以太坊常量**: [services/ethereum/constants.ts](mdc:src/chains/services/ethereum/constants.ts)
-- **Solana 常量**: [services/solana/constants.ts](mdc:src/chains/services/solana/constants.ts)
+4. **適當日誌記錄**
+   - 使用 NestJS 的 Logger 服務
+   - 記錄關鍵操作和錯誤情況
 
 ## 擴展指南
 

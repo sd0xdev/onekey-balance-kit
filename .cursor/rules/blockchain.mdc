@@ -1,0 +1,155 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# 區塊鏈服務模組
+
+本專案實現了一個模組化的區塊鏈服務架構，通過統一介面支援多種區塊鏈。`src/chains` 目錄包含核心業務邏輯和區塊鏈操作模組。
+
+## 架構概述
+
+系統使用混合架構設計，結合了工廠模式、裝飾器自動註冊和模組化原則：
+
+1. **統一介面**：所有鏈服務實現 [ChainService](mdc:src/chains/interfaces/chain-service.interface.ts) 介面
+2. **抽象基類**：[AbstractChainService](mdc:src/chains/services/abstract-chain.service.ts) 提供通用實現
+3. **工廠模式**：[ChainServiceFactory](mdc:src/chains/services/chain-service.factory.ts) 管理服務實例
+4. **裝飾器註冊**：使用 [@Chain](mdc:src/chains/decorators/chain.decorator.ts) 裝飾器自動發現和註冊服務
+5. **模組化**：每條鏈擁有獨立模組和服務實現
+
+## 目錄結構
+
+```
+src/chains/
+├── interfaces/            # 介面定義
+│   └── chain-service.interface.ts  # 鏈服務介面
+├── decorators/            # 裝飾器定義
+│   └── chain.decorator.ts # 鏈服務裝飾器
+├── services/              # 服務實現
+│   ├── abstract-chain.service.ts   # 抽象鏈服務基類
+│   ├── chain-service.factory.ts    # 鏈服務工廠
+│   ├── discovery.service.ts        # 裝飾器發現服務
+│   ├── ethereum/                   # 以太坊服務
+│   │   └── ethereum.service.ts
+│   └── solana/                     # Solana 服務
+│       └── solana.service.ts
+├── controllers/           # 控制器
+│   └── chains.controller.ts        # 鏈服務 API 控制器
+├── modules/               # 模組定義
+│   ├── chains.module.ts            # 主鏈服務模組
+│   ├── ethereum/                   # 以太坊模組
+│   │   └── ethereum.module.ts
+│   └── solana/                     # Solana 模組
+│       └── solana.module.ts
+├── constants/             # 常量定義
+│   └── index.ts                    # 鏈相關常量
+└── index.ts               # 入口檔案
+```
+
+## 支援的區塊鏈
+
+目前支援的區塊鏈包括：
+
+- **以太坊** (ETH)：完整支援地址驗證、交易查詢
+- **Solana** (SOL)：完整支援地址驗證、交易查詢
+
+## 使用方法
+
+1. **注入工廠服務**：
+   ```typescript
+   constructor(private readonly chainServiceFactory: ChainServiceFactory) {}
+   ```
+
+2. **獲取特定鏈服務**：
+   ```typescript
+   // 使用鏈名稱
+   const ethService = this.chainServiceFactory.getChainService(ChainName.ETHEREUM);
+   
+   // 也可使用代幣符號（不區分大小寫）
+   const solService = this.chainServiceFactory.getChainService('sol');
+   ```
+
+3. **使用服務方法**：
+   ```typescript
+   const isValid = ethService.isValidAddress('0x...');
+   const txHashes = await solService.getAddressTransactionHashes('sol_address');
+   ```
+
+## API 端點
+
+鏈服務模組提供了以下 API 端點：
+
+- `GET /chains`: 獲取所有支持的鏈類型
+- `GET /chains/:chain/validate/:address`: 驗證地址是否有效
+- `GET /chains/:chain/transactions/:address`: 獲取地址的交易歷史
+
+## 地址驗證
+
+每個區塊鏈有特定的地址格式和驗證邏輯：
+
+### 以太坊地址驗證
+
+以太坊服務使用 `isAddress` 函數進行嚴謹的地址驗證：
+
+```typescript
+import { isAddress } from 'ethers';
+
+// 驗證以太坊地址
+const isValid = isAddress('0x742d35Cc6634C0532925a3b844Bc454e4438f44e');
+```
+
+### Solana 地址驗證
+
+Solana 服務使用 `PublicKey` 類進行地址驗證：
+
+```typescript
+import { PublicKey } from '@solana/web3.js';
+
+// 驗證 Solana 地址
+try {
+  new PublicKey('9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin');
+  return true;
+} catch (error) {
+  return false;
+}
+```
+
+## 擴展新區塊鏈
+
+添加新的區塊鏈支援需要：
+
+1. 更新 [constants/index.ts](mdc:src/chains/constants/index.ts) 中的 `ChainName` 枚舉
+2. 創建繼承 `AbstractChainService` 的服務類並使用 `@Chain()` 裝飾器
+3. 在主模組中導入新的鏈特定模組
+
+### 添加新的鏈服務示例
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { AbstractChainService, Chain, ChainName } from '../chains';
+
+@Injectable()
+@Chain(ChainName.YOUR_CHAIN)
+export class YourChainService extends AbstractChainService {
+  getChainName(): string {
+    return ChainName.YOUR_CHAIN;
+  }
+
+  isValidAddress(address: string): boolean {
+    // 實現驗證邏輯
+    return true;
+  }
+
+  async getAddressTransactionHashes(address: string): Promise<string[]> {
+    // 實現獲取交易哈希的邏輯
+    return ['hash1', 'hash2'];
+  }
+
+  async getTransactionDetails(hash: string): Promise<any> {
+    // 實現獲取交易詳情的邏輯
+    return { hash, details: 'some details' };
+  }
+}
+```
+
+詳細實作請參考 [README.md](mdc:src/chains/README.md) 中的擴展指南。

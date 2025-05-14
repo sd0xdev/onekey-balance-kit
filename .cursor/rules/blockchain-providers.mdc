@@ -106,8 +106,8 @@ export class AppService {
 
 ## 主要提供者
 
-- **以太坊提供者**：使用 [ethers](https://docs.ethers.org/) 庫與以太坊區塊鏈交互
-- **Solana 提供者**：使用 [@solana/web3.js](https://solana-labs.github.io/solana-web3.js/) 與 Solana 區塊鏈交互
+- **以太坊提供者**：使用 [ethers](mdc:https:/docs.ethers.org) 庫與以太坊區塊鏈交互
+- **Solana 提供者**：使用 [@solana/web3.js](mdc:https:/solana-labs.github.io/solana-web3.js) 與 Solana 區塊鏈交互
 
 ## 地址驗證
 
@@ -149,3 +149,56 @@ try {
 3. 在 `BlockchainProviderFactory` 中添加新的提供者處理邏輯
 4. 創建相應的服務類並繼承 `AbstractChainService`
 5. 使用 `@Chain()` 裝飾器標記新服務
+
+# 區塊鏈提供者服務模組
+
+本項目實現了一個模組化的區塊鏈服務架構，通過統一介面支援多種區塊鏈。
+
+## 架構概述
+
+系統使用混合架構設計，結合了工廠模式、裝飾器自動註冊和模組化原則：
+
+1. **統一介面**：所有鏈服務實現 [ChainService](mdc:src/chains/interfaces/chain-service.interface.ts) 介面
+2. **抽象基類**：[AbstractChainService](mdc:src/chains/services/abstract-chain.service.ts) 提供通用實現
+3. **工廠模式**：[ChainServiceFactory](mdc:src/chains/services/chain-service.factory.ts) 管理服務實例
+4. **裝飾器註冊**：使用 [@Chain](mdc:src/chains/decorators/chain.decorator.ts) 裝飾器自動發現和註冊服務
+5. **模組化**：每條鏈擁有獨立模組和服務實現
+
+## 支援的區塊鏈
+
+目前支援的區塊鏈包括：
+
+- **以太坊** (ETH)：完整支援地址驗證、交易查詢
+- **Solana** (SOL)：完整支援地址驗證、交易查詢
+
+## 使用方法
+
+1. **注入工廠服務**：
+   ```typescript
+   constructor(private readonly chainServiceFactory: ChainServiceFactory) {}
+   ```
+
+2. **獲取特定鏈服務**：
+   ```typescript
+   // 使用鏈名稱
+   const ethService = this.chainServiceFactory.getChainService(ChainName.ETHEREUM);
+   
+   // 也可使用代幣符號（不區分大小寫）
+   const solService = this.chainServiceFactory.getChainService('sol');
+   ```
+
+3. **使用服務方法**：
+   ```typescript
+   const isValid = ethService.isValidAddress('0x...');
+   const txHashes = await solService.getAddressTransactionHashes('sol_address');
+   ```
+
+## 擴展新區塊鏈
+
+添加新的區塊鏈支援需要：
+
+1. 更新 [constants/index.ts](mdc:src/chains/constants/index.ts) 中的 `ChainName` 枚舉
+2. 創建繼承 `AbstractChainService` 的服務類並使用 `@Chain()` 裝飾器
+3. 在主模組中導入新的鏈特定模組
+
+詳細實作請參考 [README.md](mdc:src/chains/README.md) 中的擴展指南。

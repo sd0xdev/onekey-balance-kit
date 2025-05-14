@@ -5,161 +5,151 @@ alwaysApply: false
 ---
 # Nest.js 最佳實踐
 
-本專案使用 Nest.js 框架開發，遵循以下最佳實踐確保代碼質量和可維護性。
+本專案基於 Nest.js 框架開發，遵循以下最佳實踐。
 
-## 模組化設計
+## 模組組織
 
-每個功能區域應該有自己的模組，遵循 Nest.js 的模組化架構：
+1. **功能模組化**
+   - 按功能領域組織模組，如 `ChainsModule`、`BalancesModule`
+   - 每個模組應該自包含並通過明確的 API 與其他模組交互
 
-```
-src/chains/
-├── modules/              # 模組定義
-│   ├── chains.module.ts  # 主鏈服務模組
-│   ├── ethereum/         # 以太坊專屬模組
-│   └── solana/           # Solana 專屬模組
-```
-
-模組定義範例：
+2. **共享模組**
+   - 將共用功能（如快取、資料庫）放入 `CoreModule`
+   - 共享模組應通過 `exports` 暴露其服務
 
 ```typescript
 @Module({
-  imports: [DiscoveryModule, EthereumModule, SolanaModule],
-  controllers: [ChainsController],
-  providers: [ChainServiceFactory, DiscoveryService],
-  exports: [ChainServiceFactory],
+  providers: [CacheService],
+  exports: [CacheService], // 確保其他模組可以使用
 })
-export class ChainsModule {}
+export class CoreModule {}
 ```
 
 ## 依賴注入
 
-遵循依賴注入原則，使用構造函數注入依賴：
+1. **構造函數注入**
+   - 使用構造函數注入依賴，而非屬性注入
+   - 標記為 `private readonly` 以確保不可變性
 
 ```typescript
 @Injectable()
-export class EthereumService extends AbstractChainService {
+export class YourService {
   constructor(
-    protected readonly blockchainProviderFactory: BlockchainProviderFactory,
-    protected readonly configService: ConfigService,
-  ) {
-    super();
-  }
+    private readonly cacheService: CacheService,
+    private readonly configService: AppConfigService,
+  ) {}
 }
 ```
 
-## 服務設計模式
+2. **使用介面與令牌**
+   - 為抽象依賴定義介面
+   - 使用自定義令牌注入具體實現
 
-### 工廠模式
+```typescript
+export const CACHE_PROVIDER = 'CACHE_PROVIDER';
 
-使用工廠模式創建和管理服務實例：
+@Module({
+  providers: [
+    {
+      provide: CACHE_PROVIDER,
+      useClass: RedisCacheService,
+    },
+  ],
+})
+```
+
+## 服務設計
+
+1. **單一職責原則**
+   - 每個服務應該有一個明確的職責
+   - 避免"上帝對象"，將大型服務拆分為小型聚焦服務
+
+2. **工廠模式與裝飾器自動發現**
+   - 使用工廠模式創建複雜對象
+   - 結合裝飾器和反射元數據自動發現服務
 
 ```typescript
 @Injectable()
 export class ChainServiceFactory {
-  private readonly chainServices = new Map<string, ChainService>();
+  private readonly services = new Map<string, ChainService>();
   
   getChainService(chainName: string): ChainService {
-    // 從映射中獲取或創建服務實例
+    // 實現服務查找或創建邏輯
   }
 }
 ```
 
-### 裝飾器模式
+## 錯誤處理
 
-使用自定義裝飾器進行元數據標記：
+1. **異常過濾器**
+   - 使用全局異常過濾器統一處理錯誤
+   - 確保一致的錯誤響應格式
 
 ```typescript
-export function Chain(chainName: string): ClassDecorator {
-  return (target: Function) => {
-    Reflect.defineMetadata(CHAIN_METADATA, chainName, target);
-    return target;
-  };
+@Catch()
+export class GlobalExceptionFilter implements ExceptionFilter {
+  catch(exception: any, host: ArgumentsHost) {
+    // 處理並格式化錯誤響應
+  }
 }
 ```
 
-### 策略模式
-
-使用策略模式處理不同區塊鏈的特定邏輯：
+2. **業務邏輯中的錯誤處理**
+   - 使用 try/catch 捕獲預期的錯誤
+   - 對非預期異常進行適當的日誌記錄
 
 ```typescript
-// 使用介面定義統一行為
-export interface ChainService {
-  isValidAddress(address: string): boolean;
-  getAddressTransactionHashes(address: string): Promise<string[]>;
-  // 其他共同方法
+try {
+  await this.someOperation();
+} catch (err) {
+  this.logger.error(`操作失敗: ${err.message}`, err.stack);
+  throw new InternalServerErrorException('操作處理失敗');
 }
+```
 
-// 每個具體實現提供自己的策略
+## 配置管理
+
+1. **集中式配置**
+   - 使用 `ConfigModule` 集中管理應用程式配置
+   - 支援不同環境的配置
+
+2. **強類型配置**
+   - 使用類和介面定義配置結構
+   - 提供默認值和驗證
+
+```typescript
 @Injectable()
-@Chain(ChainName.ETHEREUM)
-export class EthereumService implements ChainService {
-  isValidAddress(address: string): boolean {
-    // 以太坊特定實現
-  }
+export class AppConfigService {
+  constructor(private configService: ConfigService) {}
   
-  // 其他方法實現
-}
-```
-
-## 异常處理
-
-使用 Nest.js 的异常過濾器處理错误：
-
-```typescript
-@Catch(HttpException)
-export class HttpExceptionFilter implements ExceptionFilter {
-  catch(exception: HttpException, host: ArgumentsHost) {
-    const ctx = host.switchToHttp();
-    const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
-    const status = exception.getStatus();
-
-    response.status(status).json({
-      statusCode: status,
-      timestamp: new Date().toISOString(),
-      path: request.url,
-      message: exception.message,
-    });
+  get redis(): RedisConfig | null {
+    const config = this.configService.get<RedisConfig>('redis');
+    return config || null;
   }
 }
 ```
 
-## DTO 和驗證
+## 日誌記錄
 
-使用 Data Transfer Objects (DTO) 和類驗證器：
+1. **使用 Logger 服務**
+   - 避免直接使用 `console.log`
+   - 每個類使用自己的命名日誌記錄器
 
 ```typescript
-export class ValidateAddressDto {
-  @IsString()
-  @IsNotEmpty()
-  address: string;
-  
-  @IsEnum(ChainName)
-  chain: ChainName;
-}
+private readonly logger = new Logger(YourService.name);
+
+this.logger.log('這是一條信息');
+this.logger.error('發生錯誤', stack);
 ```
 
-## 動態模組和提供者
-
-使用動態模組和提供者實現靈活的配置：
+2. **結構化日誌**
+   - 使用結構化格式記錄詳細上下文
+   - 包含相關標識符以便跟踪
 
 ```typescript
-@Module({})
-export class BlockchainModule {
-  static forRoot(options: BlockchainModuleOptions): DynamicModule {
-    return {
-      module: BlockchainModule,
-      providers: [
-        {
-          provide: BLOCKCHAIN_OPTIONS,
-          useValue: options,
-        },
-        BlockchainProviderFactory,
-      ],
-      exports: [BlockchainProviderFactory],
-    };
-  }
-}
+this.logger.log(
+  `處理交易 [${txId}], 用戶 [${userId}]`,
+);
 ```
 
 ## 測試最佳實踐

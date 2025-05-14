@@ -5,98 +5,103 @@ alwaysApply: false
 ---
 # ESLint 配置指南
 
-本專案使用 ESLint 進行代碼風格和質量的檢查，確保代碼的一致性和可維護性。
+本專案使用 ESLint 進行程式碼檢查，確保程式碼風格一致性和避免常見錯誤。
 
-## 核心規則
+## 基本配置
 
-- **使用 TypeScript**: 所有新代碼必須使用 TypeScript 編寫，利用強類型系統提高代碼質量
-- **避免 `any` 類型**: 盡量不要使用 `any` 類型，應優先使用明確的類型定義或泛型
-- **異步函數**: 所有異步函數都應該返回 Promise 並正確處理錯誤
-- **命名規範**: 使用駝峰命名法（camelCase）為變量和函數命名，使用大駝峰命名法（PascalCase）為類和介面命名
+專案使用了以下 ESLint 擴展：
 
-## 區塊鏈相關規則
+- `eslint:recommended`：ESLint 推薦的基本規則
+- `plugin:@typescript-eslint/recommended`：TypeScript 推薦規則
+- `plugin:prettier/recommended`：Prettier 格式化整合
+- `plugin:sonarjs/recommended`：SonarJS 質量檢查規則
+- `plugin:jest/recommended`：Jest 測試框架規則
 
-### 地址和哈希處理
+## 編碼風格規則
 
-處理區塊鏈地址和哈希時，遵循以下規則：
+以下是一些關鍵風格規則和最佳實踐：
+
+1. **命名約定**
+   - 類名：PascalCase（如 `ChainService`）
+   - 變量和函數：camelCase（如 `getChainService`）
+   - 常量：UPPER_SNAKE_CASE（如 `CHAIN_METADATA`）
+   - 枚舉：PascalCase（如 `ChainName`）
+   - 介面：PascalCase，不使用前綴 I（如 `ChainService` 而非 `IChainService`）
+
+2. **引入順序**
+   - 按以下順序排列：外部依賴 → 專案內部模組 → 相對路徑依賴
+   - 每個分組之間添加空行
 
 ```typescript
-// ✅ 正確方式
-function isValidEthereumAddress(address: string): boolean {
-  return isAddress(address); // 使用 ethers 庫的 isAddress 函數
-}
+// 外部依賴
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
-// ❌ 避免使用
-function isValidEthereumAddress(address: string): boolean {
-  return /^0x[a-fA-F0-9]{40}$/.test(address); // 不要使用簡單正則表達式驗證地址
+// 專案內部模組
+import { ChainName } from '../../constants';
+
+// 相對路徑依賴
+import { EthereumService } from './ethereum.service';
+```
+
+3. **註解規範**
+   - 使用 JSDoc 風格的註解
+   - 類、方法和複雜邏輯必須加註解
+   - 每個公共 API 需要註解其預期行為
+
+```typescript
+/**
+ * 驗證地址是否有效
+ * @param address 要驗證的區塊鏈地址
+ * @returns 地址是否有效
+ */
+isValidAddress(address: string): boolean {
+  // 實現邏輯
 }
 ```
 
-### 數值處理
+## 程式碼質量規則
 
-處理區塊鏈中的數值時，必須使用專門的大數庫（如 ethers 的 BigNumber 或原生 BigInt）：
+1. **複雜度控制**
+   - 圈複雜度限制：15
+   - 函數參數數量限制：4
+   - 禁止巢狀回調超過 3 層
 
-```typescript
-// ✅ 正確方式
-import { parseUnits } from 'ethers';
+2. **空值與未定義處理**
+   - 優先使用可選鏈操作符 `?.` 和空值合併運算符 `??`
+   - 避免 `== null` 的寬鬆比較，使用 `=== null` 或 `=== undefined`
 
-function convertToWei(amount: string, decimals = 18): bigint {
-  return parseUnits(amount, decimals);
-}
+3. **副作用控制**
+   - 避免在條件表達式中有賦值操作
+   - 避免修改函數參數
+   - 使用 `const` 而非 `let`（除非變量需要重新賦值）
 
-// ❌ 避免使用
-function convertToWei(amount: string): number {
-  return parseFloat(amount) * 1e18; // 不要使用浮點數處理區塊鏈金額
-}
+## 禁止的模式
+
+以下模式在程式碼審查中會被拒絕：
+
+1. **類型安全**
+   - 禁止使用 `any` 類型（除非有明確理由並添加註解）
+   - 禁止使用 `@ts-ignore` 和 `@ts-nocheck`
+
+2. **代碼可維護性**
+   - 禁止有空的代碼塊
+   - 禁止未使用的變量和導入
+   - 禁止重複的代碼塊
+   - 禁止過長的函數（超過 50 行）
+
+3. **潛在錯誤**
+   - 禁止 `console.log`（使用 Logger 服務代替）
+   - 禁止無條件的 Promise 拒絕
+
+## 應用 ESLint
+
+在開發過程中，使用以下方式運行 ESLint 檢查：
+
+```bash
+# 檢查所有文件
+npm run lint
+
+# 自動修復問題
+npm run lint:fix
 ```
-
-## 模式和反模式
-
-### 服務模式
-
-```typescript
-// ✅ 正確方式：使用依賴注入
-@Injectable()
-export class BlockchainService {
-  constructor(
-    private readonly configService: ConfigService,
-    private readonly httpService: HttpService,
-  ) {}
-}
-
-// ❌ 避免使用：直接創建實例
-export class BlockchainService {
-  private readonly config = new ConfigService();
-  private readonly http = new HttpService();
-}
-```
-
-### 錯誤處理
-
-```typescript
-// ✅ 正確方式：捕獲並轉換錯誤
-async function getBalance(address: string): Promise<string> {
-  try {
-    return await blockchainProvider.getBalance(address);
-  } catch (error) {
-    this.logger.error(`Failed to get balance for ${address}`, error);
-    throw new ServiceException('Failed to retrieve balance');
-  }
-}
-
-// ❌ 避免使用：直接拋出原始錯誤
-async function getBalance(address: string): Promise<string> {
-  try {
-    return await blockchainProvider.getBalance(address);
-  } catch (error) {
-    throw error; // 不要直接拋出原始錯誤
-  }
-}
-```
-
-## 專案特定規則
-
-- **鏈服務實現**: 所有鏈服務必須繼承 `AbstractChainService` 並實現 `ChainService` 介面
-- **裝飾器使用**: 使用 `@Chain()` 裝飾器標記所有鏈服務
-- **常量組織**: 每個鏈特定的常量應放在對應的 `constants.ts` 文件中
-- **日誌記錄**: 使用抽象基類提供的日誌方法進行統一的日誌記錄
