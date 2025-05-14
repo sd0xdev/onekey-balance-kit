@@ -6,9 +6,17 @@ import { ChainsModule } from './chains/chains.module';
 import { ProvidersModule } from './providers/providers.module';
 import { WebhookModule } from './webhook/webhook.module';
 import { ConfigsModule, AppConfigService } from './config';
+import { BalancesModule } from './balances/balances.module';
 
 @Module({
-  imports: [ConfigsModule, CoreModule, ChainsModule, ProvidersModule, WebhookModule],
+  imports: [
+    ConfigsModule,
+    CoreModule,
+    ChainsModule,
+    ProvidersModule,
+    WebhookModule,
+    BalancesModule,
+  ],
   controllers: [AppController],
   providers: [AppService, AppConfigService],
 })
