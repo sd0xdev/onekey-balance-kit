@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { SolanaService } from './solana.service';
-import { ProvidersModule } from '../../providers/providers.module';
+import { SolanaService } from '../../services/solana/solana.service';
+import { ProvidersModule } from '../../../providers/providers.module';
 
 @Module({
   imports: [ProvidersModule],

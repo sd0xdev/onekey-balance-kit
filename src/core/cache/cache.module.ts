@@ -1,28 +1,60 @@
 import { Module, Logger } from '@nestjs/common';
 import { CacheModule as NestCacheModule } from '@nestjs/cache-manager';
-import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CacheService } from './cache.service';
+import { AppConfigService } from '../../config/config.service';
+import { ConfigsModule } from '../../config';
+import { createKeyv } from '@keyv/redis';
+import { Keyv } from 'keyv';
+import { CacheableMemory } from 'cacheable';
 
 @Module({
   imports: [
+    ConfigsModule,
     NestCacheModule.registerAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
+      isGlobal: true,
+      imports: [ConfigsModule],
+      inject: [AppConfigService],
+      useFactory: (configService: AppConfigService) => {
         const logger = new Logger('CacheModule');
-        const redisUrl = configService.get<string>('REDIS_URL');
 
-        if (!redisUrl) {
-          logger.warn('Redis URL not configured, falling back to memory cache');
-          return {
-            ttl: configService.get<number>('NATIVE_CACHE_TTL', 30),
-          };
+        // 使用結構化的 Redis 配置
+        const redisConfig = configService.redis;
+
+        // 檢查 Redis 配置是否存在且 host 不為空
+        if (redisConfig && redisConfig.host) {
+          try {
+            logger.log(`Configuring Redis cache: ${redisConfig.host}:${redisConfig.port}`);
+
+            // 創建 Redis 連接字串
+            const redisUrl = `redis://:${redisConfig.password}@${redisConfig.host}:${redisConfig.port}/${redisConfig.db}`;
+
+            // 返回包含 Redis 設定的配置
+            return {
+              // 設定儲存引擎：主要使用 Redis，並帶上記憶體 fallback
+              stores: [
+                // primary Redis store
+                createKeyv(redisUrl),
+                // fallback memory store
+                new Keyv({ store: new CacheableMemory({ ttl: 30 * 60 * 1000, lruSize: 5000 }) }),
+              ],
+              ttl: 30 * 60, // 秒，不是毫秒
+              max: 100,
+              isRedisStore: true, // 保留標記以支持現有檢測邏輯
+            };
+          } catch (error) {
+            logger.error(`Failed to initialize Redis cache: ${error.message}`);
+            logger.warn('Falling back to memory cache');
+          }
+        } else {
+          logger.warn('Redis configuration not found or incomplete, using memory cache');
         }
 
-        // Redis 配置改為只使用簡單的記憶體快取，此問題將在後續修復
-        logger.warn('Redis support temporarily disabled due to type issues, using memory cache');
+        // 如果 Redis 配置不存在或初始化失敗，使用記憶體快取
         return {
-          ttl: configService.get<number>('NATIVE_CACHE_TTL', 30),
+          stores: [new Keyv({ store: new CacheableMemory({ ttl: 5 * 60 * 1000, lruSize: 1000 }) })],
+          ttl: 5 * 60, // 秒，不是毫秒
+          max: 100,
+          isRedisStore: false,
         };
       },
     }),

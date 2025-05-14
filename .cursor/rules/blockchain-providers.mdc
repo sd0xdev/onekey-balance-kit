@@ -1,5 +1,5 @@
 ---
-description: 
+description: Blockchain Provider
 globs: 
 alwaysApply: false
 ---
@@ -99,3 +99,53 @@ export class AppService {
 - 如果提供者未被正確註冊，檢查 imports 和 exports
 - 如果 API 調用失敗，檢查 API 密鑰和 URL
 - 如果返回的數據格式不正確，檢查轉換邏輯
+
+# 區塊鏈提供者 (Blockchain Provider)
+
+本專案使用多種區塊鏈提供者來與不同的區塊鏈網絡互動。區塊鏈提供者實現統一的介面，但針對每個區塊鏈有特定的實現細節。
+
+## 主要提供者
+
+- **以太坊提供者**：使用 [ethers](https://docs.ethers.org/) 庫與以太坊區塊鏈交互
+- **Solana 提供者**：使用 [@solana/web3.js](https://solana-labs.github.io/solana-web3.js/) 與 Solana 區塊鏈交互
+
+## 地址驗證
+
+每個區塊鏈有特定的地址格式和驗證邏輯：
+
+### 以太坊地址驗證
+
+以太坊服務 [src/chains/services/ethereum/ethereum.service.ts](mdc:src/chains/services/ethereum/ethereum.service.ts) 使用 `isAddress` 函數進行嚴謹的地址驗證：
+
+```typescript
+import { isAddress } from 'ethers';
+
+// 驗證以太坊地址
+const isValid = isAddress('0x742d35Cc6634C0532925a3b844Bc454e4438f44e');
+```
+
+### Solana 地址驗證
+
+Solana 服務 [src/chains/services/solana/solana.service.ts](mdc:src/chains/services/solana/solana.service.ts) 使用 `PublicKey` 類進行地址驗證：
+
+```typescript
+import { PublicKey } from '@solana/web3.js';
+
+// 驗證 Solana 地址
+try {
+  new PublicKey('9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin');
+  console.log('Address is valid');
+} catch (error) {
+  console.error('Invalid address');
+}
+```
+
+## 擴展新的區塊鏈提供者
+
+要添加新的區塊鏈提供者，需要：
+
+1. 在 `src/providers/blockchain/` 目錄中創建新的提供者類
+2. 在 `StandardChainType` 枚舉中添加新的鏈類型
+3. 在 `BlockchainProviderFactory` 中添加新的提供者處理邏輯
+4. 創建相應的服務類並繼承 `AbstractChainService`
+5. 使用 `@Chain()` 裝飾器標記新服務

@@ -1,42 +1,198 @@
 ---
-description:
-globs:
+description: Nest.js 最佳實踐
+globs: 
 alwaysApply: false
 ---
-# NestJS 模式與最佳實踐
+# Nest.js 最佳實踐
 
-本專案遵循 NestJS 框架的最佳實踐，特別是以下幾點：
+本專案使用 Nest.js 框架開發，遵循以下最佳實踐確保代碼質量和可維護性。
 
 ## 模組化設計
 
-- 每個功能區域組織為獨立模組（Module）
-- 核心功能封裝在 [src/core](mdc:src/core) 目錄下
-- 區塊鏈特定代碼在 [src/chains](mdc:src/chains) 目錄下
+每個功能區域應該有自己的模組，遵循 Nest.js 的模組化架構：
 
-## 生命週期管理
+```
+src/chains/
+├── modules/              # 模組定義
+│   ├── chains.module.ts  # 主鏈服務模組
+│   ├── ethereum/         # 以太坊專屬模組
+│   └── solana/           # Solana 專屬模組
+```
 
-- 使用 `OnModuleInit` 和 `OnModuleDestroy` 接口管理資源
-- 例如 [DbService](mdc:src/core/db/db.service.ts) 使用生命週期鉤子初始化和關閉數據庫連接
+模組定義範例：
+
+```typescript
+@Module({
+  imports: [DiscoveryModule, EthereumModule, SolanaModule],
+  controllers: [ChainsController],
+  providers: [ChainServiceFactory, DiscoveryService],
+  exports: [ChainServiceFactory],
+})
+export class ChainsModule {}
+```
 
 ## 依賴注入
 
-- 使用構造函數注入依賴
-- 所有服務使用 `@Injectable()` 裝飾器標記
-- 使用 `private readonly` 聲明注入的依賴
+遵循依賴注入原則，使用構造函數注入依賴：
 
-## 錯誤處理模式
+```typescript
+@Injectable()
+export class EthereumService extends AbstractChainService {
+  constructor(
+    protected readonly blockchainProviderFactory: BlockchainProviderFactory,
+    protected readonly configService: ConfigService,
+  ) {
+    super();
+  }
+}
+```
 
-- 使用 try/catch 包裹可能出錯的操作
-- 詳細記錄錯誤信息，包括錯誤消息和堆棧
-- 對於非致命錯誤（如緩存錯誤）不中斷流程
+## 服務設計模式
 
-## 配置管理
+### 工廠模式
 
-- 使用 `ConfigService` 進行配置管理
-- 使用環境變量控制應用行為
+使用工廠模式創建和管理服務實例：
 
-## 非同步處理
+```typescript
+@Injectable()
+export class ChainServiceFactory {
+  private readonly chainServices = new Map<string, ChainService>();
+  
+  getChainService(chainName: string): ChainService {
+    // 從映射中獲取或創建服務實例
+  }
+}
+```
 
-- 正確使用 Promise 和 async/await
-- 使用 `Promise.all` 進行並行操作
-- 避免浮動 Promise（確保所有 Promise 都被處理）
+### 裝飾器模式
+
+使用自定義裝飾器進行元數據標記：
+
+```typescript
+export function Chain(chainName: string): ClassDecorator {
+  return (target: Function) => {
+    Reflect.defineMetadata(CHAIN_METADATA, chainName, target);
+    return target;
+  };
+}
+```
+
+### 策略模式
+
+使用策略模式處理不同區塊鏈的特定邏輯：
+
+```typescript
+// 使用介面定義統一行為
+export interface ChainService {
+  isValidAddress(address: string): boolean;
+  getAddressTransactionHashes(address: string): Promise<string[]>;
+  // 其他共同方法
+}
+
+// 每個具體實現提供自己的策略
+@Injectable()
+@Chain(ChainName.ETHEREUM)
+export class EthereumService implements ChainService {
+  isValidAddress(address: string): boolean {
+    // 以太坊特定實現
+  }
+  
+  // 其他方法實現
+}
+```
+
+## 异常處理
+
+使用 Nest.js 的异常過濾器處理错误：
+
+```typescript
+@Catch(HttpException)
+export class HttpExceptionFilter implements ExceptionFilter {
+  catch(exception: HttpException, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+    const status = exception.getStatus();
+
+    response.status(status).json({
+      statusCode: status,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+      message: exception.message,
+    });
+  }
+}
+```
+
+## DTO 和驗證
+
+使用 Data Transfer Objects (DTO) 和類驗證器：
+
+```typescript
+export class ValidateAddressDto {
+  @IsString()
+  @IsNotEmpty()
+  address: string;
+  
+  @IsEnum(ChainName)
+  chain: ChainName;
+}
+```
+
+## 動態模組和提供者
+
+使用動態模組和提供者實現靈活的配置：
+
+```typescript
+@Module({})
+export class BlockchainModule {
+  static forRoot(options: BlockchainModuleOptions): DynamicModule {
+    return {
+      module: BlockchainModule,
+      providers: [
+        {
+          provide: BLOCKCHAIN_OPTIONS,
+          useValue: options,
+        },
+        BlockchainProviderFactory,
+      ],
+      exports: [BlockchainProviderFactory],
+    };
+  }
+}
+```
+
+## 測試最佳實踐
+
+- 單元測試應該模擬外部依賴
+- 集成測試應該使用測試數據庫/環境
+- 使用 Jest 的模擬功能隔離服務
+
+```typescript
+describe('EthereumService', () => {
+  let service: EthereumService;
+  let mockProviderFactory: MockType<BlockchainProviderFactory>;
+  
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        EthereumService,
+        {
+          provide: BlockchainProviderFactory,
+          useFactory: () => ({
+            getProvider: jest.fn(),
+          }),
+        },
+      ],
+    }).compile();
+    
+    service = module.get<EthereumService>(EthereumService);
+    mockProviderFactory = module.get(BlockchainProviderFactory);
+  });
+  
+  it('should validate Ethereum address correctly', () => {
+    expect(service.isValidAddress('0x742d35Cc6634C0532925a3b844Bc454e4438f44e')).toBeTruthy();
+    expect(service.isValidAddress('invalid')).toBeFalsy();
+  });
+});
+```

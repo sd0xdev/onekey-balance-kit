@@ -24,8 +24,6 @@ import { WebhookEvent, WebhookEventSchema } from './schemas/webhook-event.schema
 
         return {
           uri,
-          useNewUrlParser: true,
-          useUnifiedTopology: true,
           autoCreate: true,
           autoIndex: true,
           authSource: 'admin',

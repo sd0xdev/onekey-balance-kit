@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CoreModule } from './core/core.module';
-import { ChainsModule } from './chains/chains.module';
+import { ChainsModule } from './chains';
 import { ProvidersModule } from './providers/providers.module';
 import { WebhookModule } from './webhook/webhook.module';
 import { ConfigsModule, AppConfigService } from './config';

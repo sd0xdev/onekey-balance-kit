@@ -1,5 +1,5 @@
 ---
-description: 
+description: 專案結構
 globs: 
 alwaysApply: false
 ---
@@ -31,3 +31,127 @@ alwaysApply: false
 ## 配置
 - [eslint.config.mjs](mdc:eslint.config.mjs) - ESLint 的扁平化配置
 - [tsconfig.json](mdc:tsconfig.json) - TypeScript 配置
+
+## 專案結構
+
+本專案採用模組化的架構設計，特別是在 `src/chains` 目錄中實現了清晰的目錄結構和設計模式。
+
+## 核心目錄結構
+
+```
+src/
+├── chains/                # 區塊鏈服務模組
+│   ├── interfaces/        # 介面定義
+│   ├── decorators/        # 裝飾器定義
+│   ├── services/          # 服務實現
+│   │   ├── ethereum/      # 以太坊特定服務
+│   │   └── solana/        # Solana 特定服務
+│   ├── controllers/       # API 控制器
+│   ├── modules/           # 模組定義
+│   └── constants/         # 常量定義
+├── core/                  # 核心功能模組
+├── providers/             # 通用提供者
+├── balances/              # 餘額服務模組
+└── webhook/               # Webhook 處理模組
+```
+
+## Chains 模組設計
+
+Chains 模組使用混合架構設計，結合了多種設計模式：
+
+1. **介面與抽象基類**：通過 `ChainService` 介面和 `AbstractChainService` 抽象基類定義統一的行為
+2. **工廠模式**：使用 `ChainServiceFactory` 管理和實例化不同的鏈服務
+3. **裝飾器自動發現**：使用 `@Chain()` 裝飾器和 `DiscoveryService` 自動註冊鏈服務
+4. **模組化組織**：每個鏈有自己的專用模組和服務實現
+5. **常量隔離**：鏈特定常量封裝在各自的目錄中
+
+## 關鍵文件說明
+
+### 介面定義
+
+[interfaces/chain-service.interface.ts](mdc:src/chains/interfaces/chain-service.interface.ts) 定義了所有鏈服務必須實現的方法：
+
+```typescript
+export interface ChainService {
+  isValidAddress(address: string): boolean;
+  getAddressTransactionHashes(address: string): Promise<string[]>;
+  getTransactionDetails(hash: string): Promise<any>;
+  getChainName(): string;
+}
+```
+
+### 抽象基類
+
+[services/abstract-chain.service.ts](mdc:src/chains/services/abstract-chain.service.ts) 提供了基本實現和輔助方法：
+
+```typescript
+@Injectable()
+export abstract class AbstractChainService implements ChainService {
+  protected readonly logger = new Logger(this.constructor.name);
+  
+  abstract isValidAddress(address: string): boolean;
+  abstract getAddressTransactionHashes(address: string): Promise<string[]>;
+  abstract getTransactionDetails(hash: string): Promise<any>;
+  abstract getChainName(): string;
+  
+  // 日誌記錄輔助方法
+  protected logInfo(message: string): void {
+    this.logger.log(`[${this.getChainName()}] ${message}`);
+  }
+  
+  // 其他日誌方法...
+}
+```
+
+### 工廠服務
+
+[services/chain-service.factory.ts](mdc:src/chains/services/chain-service.factory.ts) 負責創建和管理不同鏈的服務實例：
+
+```typescript
+@Injectable()
+export class ChainServiceFactory {
+  private readonly chainServices = new Map<string, ChainService>();
+  private readonly chainServiceTypes = new Map<string, Type<ChainService>>();
+  
+  // 獲取指定鏈的服務
+  getChainService(chainName: string): ChainService {
+    // 實現邏輯...
+  }
+  
+  // 獲取所有可用的鏈名稱
+  getAvailableChains(): string[] {
+    // 實現邏輯...
+  }
+  
+  // 其他方法...
+}
+```
+
+### 鏈特定服務
+
+[services/ethereum/ethereum.service.ts](mdc:src/chains/services/ethereum/ethereum.service.ts) 和 [services/solana/solana.service.ts](mdc:src/chains/services/solana/solana.service.ts) 分別實現對特定區塊鏈的支持。
+
+### 常量組織
+
+鏈特定常量被封裝在各自的常量文件中：
+
+- **以太坊常量**: [services/ethereum/constants.ts](mdc:src/chains/services/ethereum/constants.ts)
+- **Solana 常量**: [services/solana/constants.ts](mdc:src/chains/services/solana/constants.ts)
+
+## 擴展指南
+
+要添加對新區塊鏈的支持，請按照以下步驟：
+
+1. 在 `constants/index.ts` 中添加新的鏈類型
+2. 在 `services/` 目錄中創建新的鏈特定目錄和服務類
+3. 實現 `ChainService` 介面（推薦繼承 `AbstractChainService`）
+4. 使用 `@Chain()` 裝飾器標記新服務
+5. 創建新的鏈特定模組並在主鏈模組中導入
+
+## 目錄結構最佳實踐
+
+- **按功能劃分**：相關功能應該放在同一目錄下
+- **按層級組織**：從抽象到具體，從介面到實現
+- **保持一致性**：所有鏈服務都應遵循相同的目錄結構
+- **避免循環依賴**：確保模組間依賴關係清晰，避免循環引用
+- **單一職責**：每個文件應該專注於單一職責，避免過大的文件

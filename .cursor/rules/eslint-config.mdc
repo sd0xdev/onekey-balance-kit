@@ -1,39 +1,102 @@
 ---
-description: 
+description: ESLint 配置指南
 globs: 
 alwaysApply: false
 ---
 # ESLint 配置指南
 
-本專案使用 ESLint v9 的扁平化配置格式，配置文件為 [eslint.config.mjs](mdc:eslint.config.mjs)。
+本專案使用 ESLint 進行代碼風格和質量的檢查，確保代碼的一致性和可維護性。
 
-## 主要特點
+## 核心規則
 
-- 使用 TypeScript ESLint 進行 TypeScript 代碼的靜態分析
-- 與 Prettier 集成以處理代碼格式化
-- 針對 NestJS 應用程式的最佳實踐設定
+- **使用 TypeScript**: 所有新代碼必須使用 TypeScript 編寫，利用強類型系統提高代碼質量
+- **避免 `any` 類型**: 盡量不要使用 `any` 類型，應優先使用明確的類型定義或泛型
+- **異步函數**: 所有異步函數都應該返回 Promise 並正確處理錯誤
+- **命名規範**: 使用駝峰命名法（camelCase）為變量和函數命名，使用大駝峰命名法（PascalCase）為類和介面命名
 
-## 配置結構
+## 區塊鏈相關規則
 
-配置文件使用扁平化數組，包含以下部分：
-- 忽略設定：忽略特定文件和目錄（dist、node_modules）
-- 基本推薦配置：繼承 ESLint 和 TypeScript ESLint 的推薦配置
-- 語言選項：設定 ECMAScript 版本、源碼類型和解析器選項
-- 自定義規則：根據專案需求定制的 ESLint 規則
+### 地址和哈希處理
 
-## 關鍵規則設定
+處理區塊鏈地址和哈希時，遵循以下規則：
 
-### 嚴格規則（設為 error）
-- `no-floating-promises`: 防止未處理的 Promise，避免非同步錯誤
-- `await-thenable`: 確保只對 Promise 物件使用 await
-- `no-misused-promises`: 避免在條件表達式等錯誤位置使用 Promise
+```typescript
+// ✅ 正確方式
+function isValidEthereumAddress(address: string): boolean {
+  return isAddress(address); // 使用 ethers 庫的 isAddress 函數
+}
 
-### 警告規則（設為 warn）
-- `no-explicit-any`: 警告使用 `any` 類型，鼓勵更嚴格的類型定義
-- `no-unsafe-assignment`/`call`/`member-access`/`return`: 提示不安全的類型操作
-- `restrict-template-expressions`: 警告模板字符串中的不安全類型
+// ❌ 避免使用
+function isValidEthereumAddress(address: string): boolean {
+  return /^0x[a-fA-F0-9]{40}$/.test(address); // 不要使用簡單正則表達式驗證地址
+}
+```
 
-### 關閉的規則
-- `interface-name-prefix`: 不要求介面名稱前綴
-- `explicit-function-return-type`: 允許類型推斷返回值
-- `explicit-module-boundary-types`: 不要求模組邊界顯式類型
+### 數值處理
+
+處理區塊鏈中的數值時，必須使用專門的大數庫（如 ethers 的 BigNumber 或原生 BigInt）：
+
+```typescript
+// ✅ 正確方式
+import { parseUnits } from 'ethers';
+
+function convertToWei(amount: string, decimals = 18): bigint {
+  return parseUnits(amount, decimals);
+}
+
+// ❌ 避免使用
+function convertToWei(amount: string): number {
+  return parseFloat(amount) * 1e18; // 不要使用浮點數處理區塊鏈金額
+}
+```
+
+## 模式和反模式
+
+### 服務模式
+
+```typescript
+// ✅ 正確方式：使用依賴注入
+@Injectable()
+export class BlockchainService {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly httpService: HttpService,
+  ) {}
+}
+
+// ❌ 避免使用：直接創建實例
+export class BlockchainService {
+  private readonly config = new ConfigService();
+  private readonly http = new HttpService();
+}
+```
+
+### 錯誤處理
+
+```typescript
+// ✅ 正確方式：捕獲並轉換錯誤
+async function getBalance(address: string): Promise<string> {
+  try {
+    return await blockchainProvider.getBalance(address);
+  } catch (error) {
+    this.logger.error(`Failed to get balance for ${address}`, error);
+    throw new ServiceException('Failed to retrieve balance');
+  }
+}
+
+// ❌ 避免使用：直接拋出原始錯誤
+async function getBalance(address: string): Promise<string> {
+  try {
+    return await blockchainProvider.getBalance(address);
+  } catch (error) {
+    throw error; // 不要直接拋出原始錯誤
+  }
+}
+```
+
+## 專案特定規則
+
+- **鏈服務實現**: 所有鏈服務必須繼承 `AbstractChainService` 並實現 `ChainService` 介面
+- **裝飾器使用**: 使用 `@Chain()` 裝飾器標記所有鏈服務
+- **常量組織**: 每個鏈特定的常量應放在對應的 `constants.ts` 文件中
+- **日誌記錄**: 使用抽象基類提供的日誌方法進行統一的日誌記錄

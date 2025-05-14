@@ -1,6 +1,6 @@
 ---
-description:
-globs:
+description: 快取策略
+globs: 
 alwaysApply: false
 ---
 # 多層快取策略
@@ -40,3 +40,81 @@ OneKeyBalanceKit 實現了三層快取策略，用於優化區塊鏈資產餘額
 - 快取錯誤不會導致應用程序失敗
 - 快取服務捕獲並記錄所有可能的錯誤
 - 提供優雅的降級機制
+
+# 快取策略
+
+本專案使用多層快取策略來處理區塊鏈數據，提高應用響應速度並減少對外部 API 的請求次數。
+
+## 快取層級
+
+1. **記憶體快取**：短期存儲，適用於高頻訪問數據
+2. **Redis 快取**：中期存儲，適用於跨實例共享的數據
+3. **資料庫快取**：長期存儲，適用於歷史數據分析
+
+## 快取策略實現
+
+快取邏輯應在服務層實現，而不是控制器層。這樣可以確保相同的業務邏輯在不同入口點被調用時都能享受到快取優勢。
+
+```typescript
+// 推薦的快取模式示例
+async function getAddressBalance(address: string, useCache = true): Promise<BalanceInfo> {
+  // 生成一個唯一的快取鍵
+  const cacheKey = `balance:${address}`;
+  
+  // 如果允許使用快取，先嘗試從快取獲取
+  if (useCache) {
+    const cachedData = await this.cacheManager.get(cacheKey);
+    if (cachedData) {
+      return cachedData;
+    }
+  }
+  
+  // 快取未命中或不允許使用快取，從區塊鏈獲取數據
+  const balance = await this.blockchainProvider.getBalance(address);
+  
+  // 將結果存入快取，設置過期時間
+  await this.cacheManager.set(cacheKey, balance, { ttl: 300 }); // 5分鐘過期
+  
+  return balance;
+}
+```
+
+## 快取過期策略
+
+不同類型的數據適用不同的快取過期時間：
+
+| 數據類型 | 建議過期時間 | 說明 |
+|---------|------------|------|
+| 餘額數據 | 1-5 分鐘   | 餘額可能頻繁變化 |
+| 交易歷史 | 30 分鐘    | 歷史交易不會變更，但新交易會產生 |
+| 代幣價格 | 1-10 分鐘  | 根據市場波動性調整 |
+| NFT 元數據 | 1 小時    | 元數據較少變更 |
+
+## 快取失效
+
+在以下情況應主動使快取失效：
+
+1. 用戶執行了可能改變數據的操作（如轉賬）
+2. 前端用戶手動刷新請求
+3. 後台監測到數據變化
+
+```typescript
+// 使快取失效示例
+async function transferTokens(fromAddress: string, toAddress: string, amount: string): Promise<TransactionResult> {
+  // 執行轉賬操作
+  const result = await this.blockchainProvider.transfer(fromAddress, toAddress, amount);
+  
+  // 主動使相關快取失效
+  await this.cacheManager.del(`balance:${fromAddress}`);
+  await this.cacheManager.del(`balance:${toAddress}`);
+  
+  return result;
+}
+```
+
+## 快取優化技巧
+
+1. **分層快取**：熱門數據使用更快的記憶體快取
+2. **背景刷新**：在快取即將過期前異步刷新
+3. **條件快取**：對不同用戶、不同場景使用不同快取策略
+4. **快取壓縮**：大量數據使用壓縮算法節省記憶體

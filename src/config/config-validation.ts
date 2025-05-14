@@ -35,6 +35,23 @@ class EnvironmentVariables {
   @IsString()
   DATABASE_NAME: string;
 
+  /* REDIS CONFIG */
+  @IsOptional()
+  @IsString()
+  REDIS_HOST: string;
+
+  @IsOptional()
+  @IsNumber()
+  REDIS_PORT: number;
+
+  @IsOptional()
+  @IsString()
+  REDIS_PASSWORD: string;
+
+  @IsOptional()
+  @IsNumber()
+  REDIS_DB: number;
+
   /* WEB3 CONFIG */
   @IsOptional()
   @IsUrl()
@@ -54,6 +71,11 @@ class EnvironmentVariables {
 
   @IsNumber()
   NETWORK_RETRIES: number;
+
+  /* CACHE CONFIG */
+  @IsOptional()
+  @IsNumber()
+  CACHE_TTL: number;
 }
 
 export function validateConfig(config: Record<string, unknown>) {
