@@ -1,5 +1,7 @@
 # OneKeyBalanceKit
 
+[![CI](https://github.com/sd0xdev/onekey-balance-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/sd0xdev/onekey-balance-kit/actions/workflows/ci.yml)
+
 OneKeyBalanceKit 是一個多鏈資產餘額查詢服務，支持以太坊和 Solana 區塊鏈，提供統一的 API 接口來查詢地址的代幣和 NFT 資產。
 
 ## 架構特點
@@ -92,6 +94,17 @@ curl http://localhost:3000/v1/balances/eth/0x123...
 
 - 主要技術棧：NestJS, Alchemy SDK, Redis, MongoDB
 - 模塊化設計：支持輕鬆擴展到更多區塊鏈
+
+## CI/CD
+
+本項目使用 GitHub Actions 自動化測試和構建流程：
+
+- **Lint 檢查**：確保代碼風格一致性
+- **單元測試**：運行單元測試確保功能正確性
+- **自動構建**：驗證代碼能否成功構建
+- **環境模擬**：CI 環境集成了 Redis 和 MongoDB 服務
+
+查看 [CI 工作流程](.github/workflows/ci.yml) 了解更多詳情。
 
 ## Webhook 設置
 
