@@ -1,0 +1,42 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# NestJS 模式與最佳實踐
+
+本專案遵循 NestJS 框架的最佳實踐，特別是以下幾點：
+
+## 模組化設計
+
+- 每個功能區域組織為獨立模組（Module）
+- 核心功能封裝在 [src/core](mdc:src/core) 目錄下
+- 區塊鏈特定代碼在 [src/chains](mdc:src/chains) 目錄下
+
+## 生命週期管理
+
+- 使用 `OnModuleInit` 和 `OnModuleDestroy` 接口管理資源
+- 例如 [DbService](mdc:src/core/db/db.service.ts) 使用生命週期鉤子初始化和關閉數據庫連接
+
+## 依賴注入
+
+- 使用構造函數注入依賴
+- 所有服務使用 `@Injectable()` 裝飾器標記
+- 使用 `private readonly` 聲明注入的依賴
+
+## 錯誤處理模式
+
+- 使用 try/catch 包裹可能出錯的操作
+- 詳細記錄錯誤信息，包括錯誤消息和堆棧
+- 對於非致命錯誤（如緩存錯誤）不中斷流程
+
+## 配置管理
+
+- 使用 `ConfigService` 進行配置管理
+- 使用環境變量控制應用行為
+
+## 非同步處理
+
+- 正確使用 Promise 和 async/await
+- 使用 `Promise.all` 進行並行操作
+- 避免浮動 Promise（確保所有 Promise 都被處理）

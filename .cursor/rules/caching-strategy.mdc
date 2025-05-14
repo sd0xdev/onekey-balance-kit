@@ -1,0 +1,42 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# 多層快取策略
+
+OneKeyBalanceKit 實現了三層快取策略，用於優化區塊鏈資產餘額查詢性能：
+
+## 快取層次
+
+1. Cloudflare Edge 快取（最外層）
+2. Redis 快取（中間層）
+3. MongoDB 持久化存儲（最內層）
+
+## 實現細節
+
+[CacheService](mdc:src/core/cache/cache.service.ts) 是主要的快取服務實現，該服務：
+
+- 使用 NestJS 的 `@nestjs/cache-manager` 集成
+- 支持可降級的快取策略（Redis 失敗時降級為內存快取）
+- 提供通用的快取接口：get、set、delete、reset
+
+## Webhook 驅動的快取失效
+
+系統使用 Webhook 事件通知來主動使快取失效：
+
+- [WebhookService](mdc:src/webhook/webhook.service.ts) 處理鏈上事件通知
+- 當地址活動事件到達時，相關地址的快取會被清除
+- 使用簽名驗證確保 Webhook 請求的真實性
+
+## 快取鍵策略
+
+快取鍵格式為：`portfolio:{chainType}:{address}`，例如：
+- `portfolio:eth:0x1234...` （以太坊地址）
+- `portfolio:sol:ABC123...` （Solana 地址）
+
+## 錯誤處理
+
+- 快取錯誤不會導致應用程序失敗
+- 快取服務捕獲並記錄所有可能的錯誤
+- 提供優雅的降級機制

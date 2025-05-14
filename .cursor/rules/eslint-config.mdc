@@ -1,0 +1,39 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# ESLint 配置指南
+
+本專案使用 ESLint v9 的扁平化配置格式，配置文件為 [eslint.config.mjs](mdc:eslint.config.mjs)。
+
+## 主要特點
+
+- 使用 TypeScript ESLint 進行 TypeScript 代碼的靜態分析
+- 與 Prettier 集成以處理代碼格式化
+- 針對 NestJS 應用程式的最佳實踐設定
+
+## 配置結構
+
+配置文件使用扁平化數組，包含以下部分：
+- 忽略設定：忽略特定文件和目錄（dist、node_modules）
+- 基本推薦配置：繼承 ESLint 和 TypeScript ESLint 的推薦配置
+- 語言選項：設定 ECMAScript 版本、源碼類型和解析器選項
+- 自定義規則：根據專案需求定制的 ESLint 規則
+
+## 關鍵規則設定
+
+### 嚴格規則（設為 error）
+- `no-floating-promises`: 防止未處理的 Promise，避免非同步錯誤
+- `await-thenable`: 確保只對 Promise 物件使用 await
+- `no-misused-promises`: 避免在條件表達式等錯誤位置使用 Promise
+
+### 警告規則（設為 warn）
+- `no-explicit-any`: 警告使用 `any` 類型，鼓勵更嚴格的類型定義
+- `no-unsafe-assignment`/`call`/`member-access`/`return`: 提示不安全的類型操作
+- `restrict-template-expressions`: 警告模板字符串中的不安全類型
+
+### 關閉的規則
+- `interface-name-prefix`: 不要求介面名稱前綴
+- `explicit-function-return-type`: 允許類型推斷返回值
+- `explicit-module-boundary-types`: 不要求模組邊界顯式類型

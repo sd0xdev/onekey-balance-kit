@@ -1,0 +1,33 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# OneKeyBalanceKit 專案結構
+
+本專案是一個 NestJS 應用程式，支援以太坊和 Solana 區塊鏈的資產餘額查詢。專案結構組織為模組化的設計。
+
+## 主要入口點
+- [src/main.ts](mdc:src/main.ts) - 應用程式的啟動點，設定全局 ValidationPipe 和 CORS
+- [src/app.module.ts](mdc:src/app.module.ts) - 根模組，導入所有其他模組
+
+## 核心模組
+- [src/core/db/db.module.ts](mdc:src/core/db/db.module.ts) - 數據庫模組，使用 MongoDB
+- [src/core/db/db.service.ts](mdc:src/core/db/db.service.ts) - 數據庫服務，實現與 MongoDB 的交互
+- [src/core/cache/cache.module.ts](mdc:src/core/cache/cache.module.ts) - 緩存模組，使用 Redis
+- [src/core/cache/cache.service.ts](mdc:src/core/cache/cache.service.ts) - 緩存服務，實現了三層緩存策略
+
+## 區塊鏈特定模組
+- [src/chains/ethereum/ethereum.service.ts](mdc:src/chains/ethereum/ethereum.service.ts) - 以太坊服務，實現通過 Alchemy 查詢 ETH 資產
+- [src/chains/solana/solana.service.ts](mdc:src/chains/solana/solana.service.ts) - Solana 服務，實現通過 Alchemy 查詢 SOL 資產
+
+## Webhook 模組
+- [src/webhook/webhook.service.ts](mdc:src/webhook/webhook.service.ts) - Webhook 服務，處理鏈上事件通知
+- [src/webhook/dto/webhook-event.dto.ts](mdc:src/webhook/dto/webhook-event.dto.ts) - Webhook 事件的 DTO 定義
+
+## 提供者模組
+- 位於 src/providers 目錄，例如 AlchemyService
+
+## 配置
+- [eslint.config.mjs](mdc:eslint.config.mjs) - ESLint 的扁平化配置
+- [tsconfig.json](mdc:tsconfig.json) - TypeScript 配置
