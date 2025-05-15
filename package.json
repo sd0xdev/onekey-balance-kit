@@ -22,6 +22,7 @@
   "dependencies": {
     "@apollo/utils.keyvadapter": "^4.0.0",
     "@keyv/redis": "^4.4.0",
+    "@nestjs/axios": "^4.0.0",
     "@nestjs/cache-manager": "^3.0.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
@@ -31,6 +32,7 @@
     "@redis/client": "^5.0.1",
     "@solana/web3.js": "^1.98.2",
     "alchemy-sdk": "^3.5.8",
+    "axios": "^1.9.0",
     "cache-manager": "^6.4.3",
     "cacheable": "^1.9.0",
     "class-transformer": "^0.5.1",

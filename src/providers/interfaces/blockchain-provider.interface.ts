@@ -1,3 +1,10 @@
+import { ProviderInterface } from './provider.interface';
+
+export enum NetworkType {
+  MAINNET = 'mainnet',
+  TESTNET = 'testnet',
+}
+
 export interface TokenMetadata {
   symbol?: string;
   decimals?: number;
@@ -32,16 +39,6 @@ export interface BalancesResponse {
   nfts: NftBalance[];
 }
 
-export enum NetworkType {
-  MAINNET = 'mainnet',
-  TESTNET = 'testnet',
-}
-
-export interface BlockchainProviderConfig {
-  networkType: NetworkType;
-  apiKeys?: Record<string, string>;
-}
-
 export interface ChainConfig {
   chainId: number;
   name: string;
@@ -51,10 +48,19 @@ export interface ChainConfig {
   testnetName?: string;
 }
 
-export interface BlockchainProvider {
-  getBaseUrl(networkType?: NetworkType): string;
+/**
+ * 區塊鏈提供者通用介面，擴展基本提供者介面
+ */
+export interface BlockchainProviderInterface extends ProviderInterface {
+  /**
+   * 獲取區塊鏈配置
+   */
   getChainConfig(): ChainConfig;
-  getApiKey(networkType?: NetworkType): string;
+
+  /**
+   * 獲取帳戶餘額資訊
+   * @param address 區塊鏈地址
+   * @param networkType 網絡類型
+   */
   getBalances(address: string, networkType?: NetworkType): Promise<BalancesResponse>;
-  isSupported(): boolean;
 }

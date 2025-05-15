@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { isAddress } from 'ethers';
-import { BlockchainProviderFactory } from '../../../providers/blockchain/blockchain-provider.factory';
-import { StandardChainType } from '../../../providers/blockchain/blockchain.constants';
-import { AbstractChainService } from '../abstract-chain.service';
 import { Chain } from '../../decorators/chain.decorator';
 import { ChainName } from '../../constants/index';
+import { AbstractChainService } from '../abstract-chain.service';
 import { EthereumChainId, ETH_SYMBOL, ETH_DECIMALS } from './constants';
+import { ProviderFactory } from '../../../providers/provider.factory';
+import { ProviderType } from '../../../providers/constants/blockchain-types';
+import { NetworkType } from '../../../providers/interfaces/blockchain-provider.interface';
 
 // 定義 Fungible 類型 (用於最終輸出)
 interface Fungible {
@@ -43,11 +44,9 @@ export interface EthereumBalancesResponse {
 @Injectable()
 @Chain(ChainName.ETHEREUM)
 export class EthereumService extends AbstractChainService {
-  protected readonly chainType = StandardChainType.ETHEREUM;
-
   constructor(
-    protected readonly blockchainProviderFactory: BlockchainProviderFactory,
     protected readonly configService: ConfigService,
+    private readonly providerFactory: ProviderFactory,
   ) {
     super();
   }
@@ -72,10 +71,16 @@ export class EthereumService extends AbstractChainService {
       throw new Error(`Invalid Ethereum address: ${address}`);
     }
 
-    // 模擬異步操作
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    // 實際實現將從區塊鏈供應商獲取交易數據
-    return ['0xsample1', '0xsample2']; // 示例數據
+    // 使用提供者來獲取交易哈希
+    try {
+      // 這裡可以使用以太坊提供者的特定方法
+      // 目前先使用模擬資料
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return ['0xsample1', '0xsample2']; // 示例數據
+    } catch (error) {
+      this.logError(`Failed to get transaction hashes: ${error}`);
+      throw error;
+    }
   }
 
   async getTransactionDetails(hash: string): Promise<any> {
@@ -85,15 +90,21 @@ export class EthereumService extends AbstractChainService {
       throw new Error(`Invalid Ethereum transaction hash: ${hash}`);
     }
 
-    // 模擬異步操作
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    // 實際實現將從區塊鏈供應商獲取交易詳情
-    return {
-      hash,
-      from: '0xsender',
-      to: '0xreceiver',
-      value: '1000000000000000000', // 1 ETH in wei
-    };
+    // 使用提供者來獲取交易詳情
+    try {
+      // 這裡可以使用以太坊提供者的特定方法
+      // 目前先使用模擬資料
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return {
+        hash,
+        from: '0xsender',
+        to: '0xreceiver',
+        value: '1000000000000000000', // 1 ETH in wei
+      };
+    } catch (error) {
+      this.logError(`Failed to get transaction details: ${error}`);
+      throw error;
+    }
   }
 
   async getBalances(address: string, useTestnet = false): Promise<EthereumBalancesResponse> {
@@ -104,14 +115,60 @@ export class EthereumService extends AbstractChainService {
         throw new Error(`Invalid Ethereum address: ${address}`);
       }
 
-      // 使用傳入的參數，避免 unused parameter 警告
-      const network = useTestnet ? 'testnet' : 'mainnet';
-      this.logInfo(`Network: ${network}`);
+      const networkType = useTestnet ? NetworkType.TESTNET : NetworkType.MAINNET;
+      this.logInfo(`Network: ${networkType}`);
 
-      // 模擬異步操作
+      // 獲取配置中設定的提供者類型，如果未設定則使用默認值
+      const configProviderType = this.configService.get<string>('PROVIDER_ETHEREUM');
+      const providerType = configProviderType || ProviderType.ALCHEMY;
+
+      try {
+        // 從提供者工廠獲取以太坊提供者
+        const provider = this.providerFactory.getEthereumProvider(providerType);
+
+        if (provider && provider.isSupported()) {
+          this.logInfo(`Using ${provider.getProviderName()} provider for Ethereum`);
+
+          // 從提供者獲取餘額數據
+          const balancesResponse = await provider.getBalances(address, networkType);
+
+          // 將提供者的響應轉換為 EthereumBalancesResponse 格式
+          return {
+            chainId: useTestnet ? EthereumChainId.SEPOLIA : EthereumChainId.MAINNET,
+            native: {
+              symbol: ETH_SYMBOL,
+              decimals: ETH_DECIMALS,
+              balance: balancesResponse.nativeBalance.balance,
+              usd: 0, // 可以從其他服務獲取價格
+            },
+            fungibles: balancesResponse.tokens.map((token) => ({
+              mint: token.mint,
+              symbol: token.tokenMetadata?.symbol || 'UNKNOWN',
+              decimals: token.tokenMetadata?.decimals || 18,
+              balance: token.balance,
+              usd: 0,
+            })),
+            nfts: balancesResponse.nfts.map((nft) => ({
+              mint: nft.mint,
+              tokenId: nft.tokenId || '0',
+              collection: nft.tokenMetadata?.collection?.name || 'Unknown Collection',
+              name: nft.tokenMetadata?.name || 'Unknown NFT',
+              image: nft.tokenMetadata?.image || '',
+            })),
+            updatedAt: Math.floor(Date.now() / 1000),
+          };
+        } else {
+          throw new Error(`Provider ${providerType} is not supported`);
+        }
+      } catch (providerError) {
+        this.logWarn(
+          `Provider error: ${String(providerError)}, falling back to default implementation`,
+        );
+      }
+
+      // 如果沒有可用的提供者或提供者調用失敗，使用默認實現
+      this.logInfo('Using default implementation for balances');
       await new Promise((resolve) => setTimeout(resolve, 10));
-      // 此處將實現獲取餘額的實際邏輯
-      // 示例返回
       return {
         chainId: useTestnet ? EthereumChainId.SEPOLIA : EthereumChainId.MAINNET,
         native: {

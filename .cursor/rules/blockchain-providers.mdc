@@ -1,6 +1,6 @@
 ---
 description: Blockchain Provider
-globs: 
+globs:
 alwaysApply: false
 ---
 # 區塊鏈提供者指南
@@ -9,80 +9,98 @@ alwaysApply: false
 
 ## 架構概述
 
-我們的系統使用抽象工廠模式和動態模組載入機制，使得添加新的區塊鏈提供者變得非常簡單。主要組件包括：
+本系統使用工廠模式和服務發現機制來管理不同的區塊鏈提供者。主要組件包括：
 
-1. [`BlockchainProvider`](mdc:src/providers/blockchain/blockchain-provider.interface.ts) 接口 - 定義所有提供者必須實現的方法
-2. [`AlchemyBaseProvider`](mdc:src/providers/alchemy/alchemy-base.provider.ts) - Alchemy 提供者的基礎抽象類
-3. [`BlockchainProviderFactory`](mdc:src/providers/blockchain/blockchain-provider.factory.ts) - 管理和提供區塊鏈提供者的工廠類
-4. [`BlockchainModule`](mdc:src/providers/blockchain/blockchain.module.ts) - 負責動態註冊和提供提供者的 Nest.js 模組
+1. [`BlockchainProviderInterface`](mdc:src/providers/interfaces/blockchain-provider.interface.ts) - 所有提供者必須實現的基礎接口
+2. [`ProviderFactory`](mdc:src/providers/provider.factory.ts) - 管理和提供區塊鏈提供者的工廠類
+3. [`ProviderDiscoveryService`](mdc:src/providers/provider-discovery.service.ts) - 服務發現機制，用於自動發現和註冊提供者
+4. [`ProvidersModule`](mdc:src/providers/providers.module.ts) - 負責註冊所有相關服務的模組
+
+## 提供者服務發現
+
+系統使用裝飾器和服務發現機制自動註冊提供者：
+
+1. 使用 `@Provider` 裝飾器標記區塊鏈提供者類
+2. `ProviderDiscoveryService` 在應用啟動時自動發現這些提供者
+3. `ProviderFactory` 將發現的提供者註冊並管理實例
+
+```typescript
+@Provider({
+  blockchainType: BlockchainType.ETHEREUM,
+  providerType: ProviderType.ALCHEMY,
+})
+@Injectable()
+export class EthereumAlchemyProvider extends AbstractEthereumProviderService {
+  // 實現...
+}
+```
 
 ## 添加新的區塊鏈提供者
 
-### 步驟 1: 實現提供者類
+要添加新的區塊鏈提供者，請遵循以下步驟：
 
-首先，創建一個新的提供者類，繼承自 `AlchemyBaseProvider` 或直接實現 `BlockchainProvider` 接口。
+1. **創建接口實現**：實現對應區塊鏈的接口（如 `EthereumProviderInterface` 或 `SolanaProviderInterface`）
 
-示例：添加 Polygon 區塊鏈提供者，見 [`AlchemyPolygonProvider`](mdc:src/providers/alchemy/alchemy-polygon.provider.ts)。
+2. **使用 @Provider 裝飾器標記**：
+   ```typescript
+   @Provider({
+     blockchainType: BlockchainType.YOUR_BLOCKCHAIN,
+     providerType: ProviderType.YOUR_PROVIDER,
+   })
+   @Injectable()
+   export class YourBlockchainProvider implements BlockchainProviderInterface {
+     // 實現...
+   }
+   ```
 
-### 步驟 2: 在常量文件中添加新的鏈類型
+3. **在模組中註冊**：在 `ProvidersModule` 的 `providers` 數組中添加你的提供者類
 
-在 [`blockchain.constants.ts`](mdc:src/providers/blockchain/blockchain.constants.ts) 中添加新的鏈類型：
+4. **配置環境變數**：在 `.env` 文件中添加必要的 API 密鑰
+
+## 使用提供者
+
+可以通過 `ProviderFactory` 獲取提供者實例：
 
 ```typescript
-export enum StandardChainType {
-  ETHEREUM = 'ethereum',
-  SOLANA = 'solana',
-  POLYGON = 'polygon', // 添加新的鏈類型
-  // ...其他鏈
-}
+// 注入 ProviderFactory
+constructor(private readonly providerFactory: ProviderFactory) {}
+
+// 獲取特定提供者
+const ethProvider = this.providerFactory.getProvider(BlockchainType.ETHEREUM);
+// 或使用便捷方法
+const ethProvider = this.providerFactory.getEthereumProvider();
+
+// 獲取特定提供者類型
+const alchemyProvider = this.providerFactory.getProvider(
+  BlockchainType.ETHEREUM,
+  ProviderType.ALCHEMY
+);
 ```
 
-### 步驟 3: 註冊提供者
+## 當前支援的提供者
 
-有兩種方式註冊新的提供者：
+1. **以太坊提供者**：
+   - [`EthereumAlchemyProvider`](mdc:src/providers/implementations/ethereum/ethereum-alchemy.provider.ts) - 使用 Alchemy API 的以太坊提供者
 
-#### 方式 1: 通過 BlockchainModule.register() 方法
+2. **Solana提供者**：
+   - [`SolanaAlchemyProvider`](mdc:src/providers/implementations/solana/solana-alchemy.provider.ts) - 使用 Alchemy API 的 Solana 提供者
+
+## 依賴和模組配置
+
+確保在使用 HTTP 請求的提供者（如 `SolanaAlchemyProvider`）時，在 `ProvidersModule` 中導入 `HttpModule`：
 
 ```typescript
-// src/app.module.ts 或任何其他模塊
 @Module({
-  imports: [
-    BlockchainModule.register([
-      {
-        provide: 'polygon',
-        useClass: AlchemyPolygonProvider,
-      },
-    ]),
-    // ...其他模塊
+  imports: [DiscoveryModule, ConfigModule, HttpModule],
+  providers: [
+    // ... 其他提供者
+    ProviderDiscoveryService,
+    ProviderFactory,
   ],
+  exports: [ProviderFactory],
 })
-export class AppModule {}
+export class ProvidersModule {}
 ```
-
-#### 方式 2: 手動註冊到工廠
-
-```typescript
-// 在任何需要的服務中
-@Injectable()
-export class AppService {
-  constructor(
-    private readonly blockchainProviderFactory: BlockchainProviderFactory,
-    private readonly configService: ConfigService,
-  ) {
-    // 手動註冊 Polygon 提供者
-    const polygonProvider = new AlchemyPolygonProvider(this.configService);
-    this.blockchainProviderFactory.registerProvider('polygon', polygonProvider);
-  }
-}
-```
-
-### 步驟 4: 添加環境變數
-
-在 `.env` 文件中添加新的 API 密鑰。
-
-### 步驟 5: 使用新的提供者
-
-查看示例： [`EthereumService`](mdc:src/chains/ethereum/ethereum.service.ts) 和 [`SolanaService`](mdc:src/chains/solana/solana.service.ts)。
 
 ## 提供者實現檢查清單
 
@@ -182,7 +200,7 @@ try {
    ```typescript
    // 使用鏈名稱
    const ethService = this.chainServiceFactory.getChainService(ChainName.ETHEREUM);
-   
+
    // 也可使用代幣符號（不區分大小寫）
    const solService = this.chainServiceFactory.getChainService('sol');
    ```

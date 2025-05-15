@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PublicKey } from '@solana/web3.js';
-import { BlockchainProviderFactory } from '../../../providers/blockchain/blockchain-provider.factory';
-import { StandardChainType } from '../../../providers/blockchain/blockchain.constants';
+import { ProviderFactory } from '../../../providers/provider.factory';
 import { AbstractChainService } from '../abstract-chain.service';
 import { Chain } from '../../decorators/chain.decorator';
 import { ChainName } from '../../constants/index';
@@ -45,10 +44,10 @@ export interface SolanaBalancesResponse {
 @Injectable()
 @Chain(ChainName.SOLANA)
 export class SolanaService extends AbstractChainService {
-  protected readonly chainType = StandardChainType.SOLANA;
+  protected readonly chainType = 'solana';
 
   constructor(
-    protected readonly blockchainProviderFactory: BlockchainProviderFactory,
+    protected readonly providerFactory: ProviderFactory,
     protected readonly configService: ConfigService,
   ) {
     super();
