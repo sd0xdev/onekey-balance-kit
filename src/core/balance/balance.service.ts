@@ -1,12 +1,23 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { CacheService } from '../cache/cache.service';
-import { ChainName, CHAIN_INFO_MAP, COIN_SYMBOL_TO_CHAIN_MAP } from '../../chains/constants';
+import { ChainName, COIN_SYMBOL_TO_CHAIN_MAP } from '../../chains/constants';
+import { ProviderFactory } from '../../providers/provider.factory';
+import { BlockchainType, ProviderType } from '../../providers/constants/blockchain-types';
+import { ErrorCode } from '../../common/constants/error-codes';
+import {
+  BalanceException,
+  BlockchainException,
+  ProviderException,
+} from '../../common/exceptions/application.exception';
 
 @Injectable()
 export class BalanceService {
   private readonly logger = new Logger(BalanceService.name);
 
-  constructor(private readonly cacheService: CacheService) {}
+  constructor(
+    private readonly cacheService: CacheService,
+    private readonly providerFactory: ProviderFactory,
+  ) {}
 
   /**
    * 將輸入標準化為有效的鏈名稱
@@ -27,7 +38,10 @@ export class BalanceService {
       return lowercaseInput as ChainName;
     }
 
-    throw new NotFoundException(`Chain ${input} not supported`);
+    throw new BlockchainException(
+      ErrorCode.BLOCKCHAIN_INVALID_CHAIN,
+      `Chain ${input} not supported`,
+    );
   }
 
   async getPortfolio(chainNameOrSymbol: string, address: string) {
@@ -43,20 +57,92 @@ export class BalanceService {
       this.logger.debug(`Cache miss for key ${cacheKey}`);
     }
 
-    // 2. 實際實現會在具體鏈的服務中完成，這裡只是接口定義
-    // 3. 設置快取並返回數據
-    // 實際實現時，這裡會調用鏈特定的服務
-    const result = {
-      chainId: CHAIN_INFO_MAP[chain].id,
-      chainName: CHAIN_INFO_MAP[chain].name,
-      native: {},
-      fungibles: [],
-      nfts: [],
-      updatedAt: Math.floor(Date.now() / 1000),
+    // 2. 使用提供者工廠獲取對應的區塊鏈提供者實例
+    try {
+      // 將 ChainName 轉換為 BlockchainType
+      const blockchainType = this.mapChainNameToBlockchainType(chain);
+
+      // 特別處理: 明確指定使用 ALCHEMY 提供者
+      const provider = this.providerFactory.getProvider(blockchainType, ProviderType.ALCHEMY);
+
+      this.logger.debug(`Using provider: ${provider.getProviderName()} for ${blockchainType}`);
+
+      // 獲取區塊鏈配置
+      const chainConfig = provider.getChainConfig();
+
+      // 調用提供者的 getBalances 方法獲取餘額數據
+      const balanceData = await provider.getBalances(address);
+
+      // 檢查是否成功獲取餘額數據
+      if (balanceData.isSuccess === false) {
+        // 根據錯誤訊息分類拋出不同類型的異常
+        const errorMsg = balanceData.errorMessage || '未知錯誤';
+
+        if (errorMsg.includes('401 Unauthorized') || errorMsg.includes('Must be authenticated')) {
+          throw new ProviderException(ErrorCode.PROVIDER_AUTH_FAILED, errorMsg);
+        } else if (errorMsg.includes('Invalid') && errorMsg.includes('address')) {
+          throw new BlockchainException(ErrorCode.BLOCKCHAIN_INVALID_ADDRESS, errorMsg);
+        } else {
+          throw new BalanceException(ErrorCode.BALANCE_FETCH_FAILED, errorMsg);
+        }
+      }
+
+      // 3. 組裝結果數據
+      const result = {
+        chainId: chainConfig.chainId,
+        chainName: chainConfig.name,
+        native: {
+          balance: balanceData.nativeBalance.balance,
+          symbol: chainConfig.nativeSymbol,
+          decimals: chainConfig.nativeDecimals,
+        },
+        fungibles: balanceData.tokens.map((token) => ({
+          mint: token.mint,
+          balance: token.balance,
+          symbol: token.tokenMetadata?.symbol || 'Unknown',
+          decimals: token.tokenMetadata?.decimals || 0,
+          name: token.tokenMetadata?.name || 'Unknown Token',
+        })),
+        nfts: balanceData.nfts.map((nft) => ({
+          mint: nft.mint,
+          tokenId: nft.tokenId || '',
+          name: nft.tokenMetadata?.name || 'Unknown NFT',
+          collection: nft.tokenMetadata?.collection?.name || '',
+          image: nft.tokenMetadata?.image || '',
+        })),
+        updatedAt: Math.floor(Date.now() / 1000),
+      };
+
+      // 只有成功獲取數據時才緩存結果
+      await this.cacheService.set(cacheKey, result);
+      return result;
+    } catch (error) {
+      this.logger.error(`Error fetching portfolio for ${chain}:${address}`, error);
+      // 重新拋出錯誤，讓過濾器處理
+      throw error;
+    }
+  }
+
+  /**
+   * 將 ChainName 映射到 BlockchainType
+   * @param chainName 鏈名稱
+   * @returns 區塊鏈類型
+   */
+  private mapChainNameToBlockchainType(chainName: ChainName): BlockchainType {
+    const chainToBlockchainMap = {
+      [ChainName.ETHEREUM]: BlockchainType.ETHEREUM,
+      [ChainName.SOLANA]: BlockchainType.SOLANA,
+      // 可以根據需要擴展更多映射
     };
 
-    // 使用 CacheService 設置快取，讓它使用默認的快取時間
-    await this.cacheService.set(cacheKey, result);
-    return result;
+    const blockchainType = chainToBlockchainMap[chainName];
+    if (!blockchainType) {
+      throw new BlockchainException(
+        ErrorCode.BLOCKCHAIN_INVALID_CHAIN,
+        `無法將 ${chainName} 映射到對應的區塊鏈類型`,
+      );
+    }
+
+    return blockchainType;
   }
 }

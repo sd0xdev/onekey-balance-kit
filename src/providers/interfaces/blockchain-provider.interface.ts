@@ -37,6 +37,8 @@ export interface BalancesResponse {
   };
   tokens: TokenBalance[];
   nfts: NftBalance[];
+  isSuccess?: boolean;
+  errorMessage?: string;
 }
 
 export interface ChainConfig {

@@ -31,6 +31,6 @@ export const SYMBOL_TO_BLOCKCHAIN_MAP: Record<string, BlockchainType> = {
  */
 export const BLOCKCHAIN_TO_DEFAULT_PROVIDER_MAP: Record<BlockchainType, ProviderType> = {
   [BlockchainType.ETHEREUM]: ProviderType.ALCHEMY,
-  [BlockchainType.SOLANA]: ProviderType.RPC,
-  [BlockchainType.BITCOIN]: ProviderType.RPC,
+  [BlockchainType.SOLANA]: ProviderType.ALCHEMY,
+  [BlockchainType.BITCOIN]: ProviderType.ALCHEMY,
 };

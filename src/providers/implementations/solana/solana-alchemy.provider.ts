@@ -194,18 +194,21 @@ export class SolanaAlchemyProvider extends AbstractSolanaProviderService {
         },
         tokens,
         nfts,
+        isSuccess: true,
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logError(`Failed to get balances from Alchemy: ${errorMessage}`);
 
-      // 返回空結果作為後備
+      // 返回帶有失敗標誌的結果
       return {
         nativeBalance: {
           balance: '0',
         },
         tokens: [],
         nfts: [],
+        isSuccess: false,
+        errorMessage: errorMessage,
       };
     }
   }
