@@ -14,14 +14,11 @@ spec:
         autoscaling.knative.dev/maxScale: '${MAX_INSTANCES}'
         run.googleapis.com/cpu-throttling: 'true'
         run.googleapis.com/execution-environment: 'gen2'
-        run.googleapis.com/vpc-access-egress: 'private-ranges-only'
     spec:
       containerConcurrency: 80
       timeoutSeconds: 300
       containers:
-        - image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/one-key-balance-kit/api${IMAGE_SUFFIX}:${IMAGE_TAG}
-          ports:
-            - containerPort: 3000
+        - image: ${IMAGE_PATH}:${IMAGE_TAG}
           resources:
             limits:
               cpu: '1'
@@ -29,8 +26,6 @@ spec:
           env:
             - name: NODE_ENV
               value: ${NODE_ENV}
-            - name: PORT
-              value: '3000'
             - name: APP_NAME
               value: one-key-balance-kit${ENV_SUFFIX}
             - name: LOG_LEVEL
@@ -38,12 +33,12 @@ spec:
             - name: API_BASE_URL
               value: ${API_BASE_URL}
             - name: CORS_ORIGIN
-              value: ${CORS_ORIGIN}
+              value: '${CORS_ORIGIN}'
             - name: NETWORK_TIMEOUT
               value: '30000'
             - name: NETWORK_RETRIES
               value: '3'
-            # 密鑰引用
+            # -------- Secret references --------
             - name: MONGO_URL
               valueFrom:
                 secretKeyRef:
@@ -109,45 +104,10 @@ spec:
                 secretKeyRef:
                   name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_ETH
                   key: latest
-            - name: ALCHEMY_API_KEY_ETH_MAINNET
-              valueFrom:
-                secretKeyRef:
-                  name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_ETH_MAINNET
-                  key: latest
-            - name: ALCHEMY_API_KEY_ETH_TESTNET
-              valueFrom:
-                secretKeyRef:
-                  name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_ETH_TESTNET
-                  key: latest
             - name: ALCHEMY_API_KEY_SOL
               valueFrom:
                 secretKeyRef:
                   name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_SOL
-                  key: latest
-            - name: ALCHEMY_API_KEY_SOL_MAINNET
-              valueFrom:
-                secretKeyRef:
-                  name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_SOL_MAINNET
-                  key: latest
-            - name: ALCHEMY_API_KEY_SOL_TESTNET
-              valueFrom:
-                secretKeyRef:
-                  name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_SOL_TESTNET
-                  key: latest
-            - name: ALCHEMY_API_KEY_POLYGON
-              valueFrom:
-                secretKeyRef:
-                  name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_POLYGON
-                  key: latest
-            - name: ALCHEMY_API_KEY_POLYGON_MAINNET
-              valueFrom:
-                secretKeyRef:
-                  name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_POLYGON_MAINNET
-                  key: latest
-            - name: ALCHEMY_API_KEY_POLYGON_TESTNET
-              valueFrom:
-                secretKeyRef:
-                  name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_POLYGON_TESTNET
                   key: latest
             - name: QUICKNODE_ETH_MAINNET_URL
               valueFrom:
@@ -184,24 +144,19 @@ spec:
                 secretKeyRef:
                   name: ${SECRET_PREFIX}_API_KEY
                   key: latest
+          # ---- Health checks ----
           startupProbe:
             httpGet:
               path: /health
-              port: 3000
-            initialDelaySeconds: 5
-            periodSeconds: 3
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
             failureThreshold: 3
           livenessProbe:
             httpGet:
               path: /health
-              port: 3000
+              port: 8080
             periodSeconds: 30
-            failureThreshold: 3
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 3000
-            periodSeconds: 5
             failureThreshold: 3
   traffic:
     - percent: 100

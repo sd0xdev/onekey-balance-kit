@@ -32,8 +32,9 @@ async function bootstrap() {
 
   app.enableCors(); // 允許跨域請求
   app.setGlobalPrefix('v1'); // API版本前綴
-  await app.listen(3000);
-  console.log(`OneKeyBalanceKit 正在運行，訪問: http://localhost:3000/v1/`);
+  const port = parseInt(process.env.PORT || '3000', 10);
+  await app.listen(port);
+  console.log(`OneKeyBalanceKit 正在運行，訪問: http://localhost:${port}/v1/`);
 }
 
 // 處理未捕獲的Promise錯誤，防止進程崩潰

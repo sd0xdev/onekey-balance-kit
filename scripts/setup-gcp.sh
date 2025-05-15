@@ -1,31 +1,36 @@
-#!/bin/bash
-# 取消 set -e，避免因錯誤而立即終止
-# set -e
+#!/usr/bin/env bash
 
-# 此腳本用於設置 Google Cloud 環境以進行部署
-# 請先執行 scripts/setup-vars.sh 設置必要的環境變數
+# -------------------------------------------------------------
+# Google Cloud Workload Identity Federation bootstrap script
+# 1. Creates / verifies required APIs, Artifact Registry repo,
+#    Service Account, Workload Identity Pool & OIDC Provider
+# 2. Binds GitHub Actions repository to the Service Account
+# 3. Prints environment variables required by your GitHub repo
+# -------------------------------------------------------------
 
-# 顏色設置
+# Exit on first error (comment out for debugging)
+#set -euo pipefail
+
+# ---------- Color helpers ----------
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# 檢查環境變數是否設置
-if [ -z "$PROJECT_ID" ]; then
+# ---------- Environment checks ----------
+if [[ -z "${PROJECT_ID:-}" ]]; then
   echo -e "${RED}錯誤: 未設置 PROJECT_ID 環境變數${NC}"
   echo -e "${YELLOW}請先執行 source .env.gcp 或 ./scripts/setup-vars.sh${NC}"
   exit 1
 fi
 
-if [ -z "$GITHUB_REPO" ]; then
+if [[ -z "${GITHUB_REPO:-}" ]]; then
   echo -e "${RED}錯誤: 未設置 GITHUB_REPO 環境變數${NC}"
   echo -e "${YELLOW}請先執行 source .env.gcp 或 ./scripts/setup-vars.sh${NC}"
   exit 1
 fi
 
-# 設置變數，使用環境變數或默認值
-PROJECT_ID="${PROJECT_ID}"
+# ---------- Derived variables ----------
 REGION="${REGION:-asia-east1}"
 REPOSITORY_NAME="${REPOSITORY_NAME:-one-key-balance-kit}"
 SERVICE_ACCOUNT_NAME="${SERVICE_ACCOUNT_NAME:-github-actions-runner}"
@@ -35,12 +40,22 @@ POOL_DISPLAY_NAME="${POOL_DISPLAY_NAME:-GitHub Actions Pool}"
 PROVIDER_ID="${PROVIDER_ID:-github-provider}"
 PROVIDER_DISPLAY_NAME="${PROVIDER_DISPLAY_NAME:-GitHub Provider}"
 
-# 設置服務帳號電子郵件
-SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_EMAIL:-$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com}"
+# ---------- Project number (必須使用數字做 audience) ----------
+PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format="value(projectNumber)")
+if [[ -z "$PROJECT_NUMBER" ]]; then
+  echo -e "${RED}無法取得 projectNumber，請確認當前身分有 viewer 權限${NC}"
+  exit 1
+fi
 
-echo -e "${GREEN}設置 Google Cloud 環境，專案: $PROJECT_ID，區域: $REGION${NC}"
+SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# 確保已啟用所需的 API
+# Path constants必須使用 projectNumber
+WORKLOAD_IDENTITY_POOL_PATH="projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}"
+PROVIDER_PATH="${WORKLOAD_IDENTITY_POOL_PATH}/providers/${PROVIDER_ID}"
+
+echo -e "${GREEN}設置 Google Cloud 環境，專案: $PROJECT_ID ($PROJECT_NUMBER)，區域: $REGION${NC}"
+
+# ---------- Enable required APIs ----------
 echo "啟用必要的 API..."
 gcloud services enable \
   artifactregistry.googleapis.com \
@@ -49,116 +64,98 @@ gcloud services enable \
   iam.googleapis.com \
   iamcredentials.googleapis.com \
   secretmanager.googleapis.com \
-  --project $PROJECT_ID
+  --project "$PROJECT_ID"
 
-# 創建 Artifact Registry 存儲庫（冪等操作）
+# ---------- Artifact Registry ----------
 echo "創建 Artifact Registry 儲存庫..."
-if gcloud artifacts repositories describe $REPOSITORY_NAME --location=$REGION --project $PROJECT_ID &> /dev/null; then
+if gcloud artifacts repositories describe "$REPOSITORY_NAME" --location="$REGION" --project "$PROJECT_ID" &>/dev/null; then
   echo -e "${YELLOW}儲存庫 $REPOSITORY_NAME 已存在${NC}"
 else
-  # 使用 || true 確保即使命令失敗也不會中斷腳本
-  gcloud artifacts repositories create $REPOSITORY_NAME \
+  gcloud artifacts repositories create "$REPOSITORY_NAME" \
     --repository-format=docker \
-    --location=$REGION \
+    --location="$REGION" \
     --description="Docker images for $REPOSITORY_NAME" \
-    --project $PROJECT_ID 2>/dev/null || echo -e "${YELLOW}儲存庫 $REPOSITORY_NAME 已存在或創建失敗${NC}"
+    --project "$PROJECT_ID"
 fi
 
-# 創建服務帳號（冪等操作）
+# ---------- Service Account ----------
 echo "創建服務帳號..."
-if gcloud iam service-accounts describe $SERVICE_ACCOUNT_EMAIL --project $PROJECT_ID &> /dev/null; then
+if gcloud iam service-accounts describe "$SERVICE_ACCOUNT_EMAIL" --project "$PROJECT_ID" &>/dev/null; then
   echo -e "${YELLOW}服務帳號 $SERVICE_ACCOUNT_EMAIL 已存在${NC}"
 else
-  # 使用 || true 確保即使命令失敗也不會中斷腳本
-  gcloud iam service-accounts create $SERVICE_ACCOUNT_NAME \
+  gcloud iam service-accounts create "$SERVICE_ACCOUNT_NAME" \
     --display-name="$SERVICE_ACCOUNT_DISPLAY_NAME" \
-    --project $PROJECT_ID 2>/dev/null || echo -e "${YELLOW}服務帳號 $SERVICE_ACCOUNT_NAME 已存在或創建失敗${NC}"
+    --project "$PROJECT_ID"
 fi
 
-# 授予服務帳號權限
+# ---------- Grant roles to Service Account ----------
 echo "授予服務帳號權限..."
-
-# Artifact Registry 權限
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
-  --role="roles/artifactregistry.writer" \
-  --condition=None || echo -e "${YELLOW}設置 Artifact Registry 權限失敗，可能已存在${NC}"
-
-# Cloud Run 權限
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
-  --role="roles/run.admin" \
-  --condition=None || echo -e "${YELLOW}設置 Cloud Run 權限失敗，可能已存在${NC}"
-
-# IAM 權限（用於令牌創建）
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
-  --role="roles/iam.serviceAccountUser" \
-  --condition=None || echo -e "${YELLOW}設置 IAM 權限失敗，可能已存在${NC}"
-
-# Secret Manager 權限
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
-  --role="roles/secretmanager.secretAccessor" \
-  --condition=None || echo -e "${YELLOW}設置 Secret Manager 權限失敗，可能已存在${NC}"
+roles=(
+  roles/artifactregistry.writer
+  roles/run.admin
+  roles/iam.serviceAccountUser
+  roles/secretmanager.secretAccessor
+)
+for r in "${roles[@]}"; do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:${SERVICE_ACCOUNT_EMAIL}" \
+    --role="$r" --condition=None 2>/dev/null || true
+done
 
 echo -e "${GREEN}權限已授予${NC}"
 
-# 創建 Workload Identity Pool（冪等操作）
-echo "設置工作負載身份聯合..."
-if gcloud iam workload-identity-pools describe $POOL_ID --location="global" --project $PROJECT_ID &> /dev/null; then
+# ---------- Workload Identity Pool ----------
+if gcloud iam workload-identity-pools describe "$POOL_ID" --location=global --project "$PROJECT_ID" &>/dev/null; then
   echo -e "${YELLOW}工作負載身份池 $POOL_ID 已存在${NC}"
 else
-  # 使用 || true 確保即使命令失敗也不會中斷腳本
-  gcloud iam workload-identity-pools create $POOL_ID \
-    --location="global" \
+  gcloud iam workload-identity-pools create "$POOL_ID" \
+    --location=global \
     --display-name="$POOL_DISPLAY_NAME" \
-    --project $PROJECT_ID 2>/dev/null || echo -e "${YELLOW}工作負載身份池 $POOL_ID 已存在或創建失敗${NC}"
+    --project "$PROJECT_ID"
 fi
 
-# 獲取池名稱（即使前面的創建失敗也嘗試獲取）
-WORKLOAD_IDENTITY_POOL_ID=$(gcloud iam workload-identity-pools describe $POOL_ID \
-  --location="global" \
-  --project $PROJECT_ID \
-  --format="value(name)" 2>/dev/null || echo "projects/$PROJECT_ID/locations/global/workloadIdentityPools/$POOL_ID")
-
-# 創建提供者（冪等操作）
-PROVIDER_PATH="projects/$PROJECT_ID/locations/global/workloadIdentityPools/$POOL_ID/providers/$PROVIDER_ID"
-if gcloud iam workload-identity-pools providers describe $PROVIDER_ID \
-    --workload-identity-pool=$POOL_ID \
-    --location="global" \
-    --project $PROJECT_ID &> /dev/null; then
-  echo -e "${YELLOW}工作負載身份提供者 $PROVIDER_ID 已存在${NC}"
+# ---------- OIDC Provider ----------
+if gcloud iam workload-identity-pools providers describe "$PROVIDER_ID" \
+     --workload-identity-pool="$POOL_ID" --location=global --project "$PROJECT_ID" &>/dev/null; then
+  echo -e "${YELLOW}工作負載身份提供者 $PROVIDER_ID 已存在，跳過創建${NC}"
 else
-  # 使用 || true 確保即使命令失敗也不會中斷腳本
-  gcloud iam workload-identity-pools providers create-oidc $PROVIDER_ID \
-    --workload-identity-pool=$POOL_ID \
-    --location="global" \
+  gcloud iam workload-identity-pools providers create-oidc "$PROVIDER_ID" \
+    --workload-identity-pool="$POOL_ID" \
+    --location=global \
     --display-name="$PROVIDER_DISPLAY_NAME" \
-    --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository" \
     --issuer-uri="https://token.actions.githubusercontent.com" \
-    --project $PROJECT_ID 2>/dev/null || echo -e "${YELLOW}工作負載身份提供者 $PROVIDER_ID 已存在或創建失敗${NC}"
+    --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository" \
+    --attribute-condition="assertion.repository=='${GITHUB_REPO}'" \
+    --project "$PROJECT_ID"
 fi
 
-# 綁定 GitHub repo 到服務帳號
+echo -e "${GREEN}工作負載身份提供者 $PROVIDER_ID 準備完成${NC}"
+
+# ---------- Bind GitHub repo to Service Account ----------
+
 echo "綁定 GitHub 存儲庫 ${GITHUB_REPO} 到服務帳號..."
-gcloud iam service-accounts add-iam-policy-binding $SERVICE_ACCOUNT_EMAIL \
+BINDING_MEMBER="principalSet://iam.googleapis.com/${WORKLOAD_IDENTITY_POOL_PATH}/attribute.repository/${GITHUB_REPO}"
+
+gcloud iam service-accounts add-iam-policy-binding "$SERVICE_ACCOUNT_EMAIL" \
   --role="roles/iam.workloadIdentityUser" \
-  --member="principalSet://iam.googleapis.com/${WORKLOAD_IDENTITY_POOL_ID}/attribute.repository/${GITHUB_REPO}" \
-  --project $PROJECT_ID 2>/dev/null || echo -e "${YELLOW}綁定 GitHub 存儲庫失敗，可能已存在${NC}"
+  --member="$BINDING_MEMBER" \
+  --project "$PROJECT_ID" 2>/dev/null || true
 
-WORKLOAD_IDENTITY_PROVIDER="projects/$PROJECT_ID/locations/global/workloadIdentityPools/$POOL_ID/providers/$PROVIDER_ID"
+echo -e "${GREEN}Service Account 綁定完成${NC}"
 
-# 輸出設置信息
-echo ""
-echo -e "${GREEN}=== 設置完成 ===${NC}"
-echo -e "${YELLOW}請將以下密鑰添加到您的 GitHub 存儲庫:${NC}"
-echo ""
-echo "GCP_PROJECT_ID: $PROJECT_ID"
-echo "GCP_SERVICE_ACCOUNT: $SERVICE_ACCOUNT_EMAIL"
-echo "GCP_WORKLOAD_IDENTITY_PROVIDER: $WORKLOAD_IDENTITY_PROVIDER"
-echo ""
-echo -e "${YELLOW}請將以下變數添加到您的 GitHub 存儲庫:${NC}"
-echo "GCP_REGION: $REGION"
-echo ""
-echo -e "${YELLOW}請按照文檔在 Secret Manager 中創建所需的密鑰。${NC}"
+gcloud iam service-accounts get-iam-policy "$SERVICE_ACCOUNT_EMAIL" --project "$PROJECT_ID" | grep -A 5 workloadIdentityUser || true
+
+# ---------- Grant Secret access to Cloud Run runtime SA ----------
+RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+echo "授權 Cloud Run runtime SA 存取 SecretManager..."
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:${RUNTIME_SA}" --role="roles/secretmanager.secretAccessor" --condition=None 2>/dev/null || true
+
+# ---------- Output for GitHub Secrets ----------
+WORKLOAD_IDENTITY_PROVIDER="${PROVIDER_PATH}"
+
+echo -e "\n${GREEN}=== 設置完成，請在 GitHub Secret / Variables 使用以下值 ===${NC}"
+echo -e "GCP_PROJECT_ID      = $PROJECT_ID"
+echo -e "GCP_PROJECT_NUMBER  = $PROJECT_NUMBER"
+echo -e "GCP_SERVICE_ACCOUNT = $SERVICE_ACCOUNT_EMAIL"
+echo -e "GCP_WORKLOAD_IDENTITY_PROVIDER = $WORKLOAD_IDENTITY_PROVIDER"
+echo -e "GCP_REGION          = $REGION"
