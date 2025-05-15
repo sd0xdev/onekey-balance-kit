@@ -12,30 +12,24 @@ src/chains/
 ├── decorators/            # 裝飾器定義
 │   └── chain.decorator.ts            # 鏈服務裝飾器
 │   └── blockchain-provider.decorator.ts  # 區塊鏈提供者裝飾器
-│   └── blockchain-provider-param.decorator.ts  # 提供者參數裝飾器
 ├── interceptors/          # 攔截器
 │   └── blockchain-provider.interceptor.ts  # 區塊鏈提供者攔截器
 ├── services/              # 服務實現
-│   ├── abstract-chain.service.ts   # 抽象鏈服務基類
-│   ├── chain-service.factory.ts    # 鏈服務工廠
-│   ├── discovery.service.ts        # 裝飾器發現服務
-│   ├── blockchain.service.ts       # 區塊鏈服務
-│   ├── request-context.service.ts  # 請求上下文服務
+│   ├── core/              # 核心服務
+│   │   ├── abstract-chain.service.ts   # 抽象鏈服務基類
+│   │   ├── chain-service.factory.ts    # 鏈服務工廠
+│   │   ├── discovery.service.ts        # 裝飾器發現服務
+│   │   ├── blockchain.service.ts       # 區塊鏈服務
+│   │   └── request-context.service.ts  # 請求上下文服務
 │   ├── ethereum/                   # 以太坊服務
 │   │   └── ethereum.service.ts
 │   └── solana/                     # Solana 服務
 │       └── solana.service.ts
 ├── controllers/           # 控制器
 │   └── chains.controller.ts        # 鏈服務 API 控制器
-├── modules/               # 模組定義
-│   ├── chains.module.ts            # 主鏈服務模組
-│   ├── ethereum/                   # 以太坊模組
-│   │   └── ethereum.module.ts
-│   └── solana/                     # Solana 模組
-│       └── solana.module.ts
 ├── constants/             # 常量定義
 │   └── index.ts                    # 鏈相關常量
-├── blockchain.module.ts   # 區塊鏈模組
+├── blockchain.module.ts   # 區塊鏈模組 (整合了原有的 ChainsModule)
 ├── index.ts               # 入口檔案
 └── README.md              # 本文檔
 ```
@@ -126,7 +120,7 @@ export class AppModule {}
 
 ```typescript
 import { Injectable } from '@nestjs/common';
-import { BlockchainService } from './chains/services/blockchain.service';
+import { BlockchainService } from './chains/services/core/blockchain.service';
 
 @Injectable()
 export class YourService {
@@ -180,9 +174,9 @@ GET /balances/ethereum/0x742d35Cc6634C0532925a3b844Bc454e4438f44e?provider=quick
 
 ```typescript
 import { Injectable } from '@nestjs/common';
-import { AbstractChainService } from '../services/abstract-chain.service';
-import { Chain } from '../decorators/chain.decorator';
-import { ChainName } from '../constants';
+import { AbstractChainService } from './chains/services/core/abstract-chain.service';
+import { Chain } from './chains/decorators/chain.decorator';
+import { ChainName } from './chains/constants';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -222,13 +216,16 @@ export class YourChainService extends AbstractChainService {
 - `GET /chains/:chain/validate/:address`: 驗證地址是否有效
 - `GET /chains/:chain/transactions/:address`: 獲取地址的交易歷史
 
-## 最佳實踐
+## 自動發現和註冊機制
 
-1. **使用抽象類**：繼承 `AbstractChainService` 而不是直接實現介面，以獲取通用功能。
-2. **使用裝飾器**：為服務類添加 `@Chain()` 裝飾器，啟用自動註冊。
-3. **模組化**：每個鏈都應有獨立的服務和模組。
-4. **統一異常處理**：使用抽象類中的日誌方法記錄錯誤。
-5. **類型安全**：使用適當的類型定義和泛型參數。
+本模組使用 `@Chain()` 裝飾器和 `DiscoveryService` 實現了鏈服務的自動發現和註冊：
+
+1. **服務標記**：使用 `@Chain(ChainName.XXX)` 裝飾器標記鏈服務
+2. **啟動時發現**：在 `ChainServiceFactory` 的 `onModuleInit` 生命週期中，自動掃描所有標記的服務
+3. **自動註冊**：將發現的服務註冊到工廠中
+4. **零配置添加**：新增鏈服務只需添加 `@Chain()` 裝飾器，無需手動註冊
+
+這種設計使得擴展新的區塊鏈變得簡單高效，同時保持了代碼的解耦和可維護性。
 
 ## 擴展建議
 
@@ -269,50 +266,15 @@ console.log(`Solana 代幣符號: ${SOL_SYMBOL}`);
 console.log(`Solana 代幣精度: ${SOL_DECIMALS}`);
 ```
 
-這種模組化的常量組織方式有以下優點：
+## 重構變更說明
 
-1. **封裝性**: 每個鏈的特定常量只在該鏈的上下文中可見
-2. **可維護性**: 新增或修改特定鏈的常量不會影響其他鏈
-3. **語義清晰**: 常量的歸屬關係一目了然
-4. **命名空間隔離**: 避免不同鏈間的常量命名衝突
+最新的重構將原有的 `ChainsModule` 與 `BlockchainModule` 進行了整合，並對目錄結構進行了優化：
 
-## 地址驗證
+1. **模組整合**：移除了 `modules` 目錄，將所有功能集中到 `BlockchainModule` 中
+2. **目錄結構優化**：
+   - 核心服務移至 `services/core` 子目錄
+   - 保持鏈特定服務在 `services/[chain-name]` 中
+3. **移除冗餘**：刪除了不必要的參數裝飾器，完全依賴請求上下文和攔截器
+4. **請求上下文驅動**：所有鏈服務和提供者選擇都通過請求上下文實現隔離
 
-為了確保地址驗證的準確性和安全性，我們使用了區塊鏈專用的 SDK 進行嚴謹的驗證：
-
-### 以太坊地址驗證
-
-以太坊地址驗證使用 `ethers` 庫的 `isAddress` 函數，它會執行以下檢查：
-
-- 正確的地址格式和長度
-- 符合以太坊地址的校驗和規則
-- 支持 EIP-55 大小寫混合檢查
-
-```typescript
-import { isAddress } from 'ethers';
-
-// 驗證以太坊地址
-const isValid = isAddress('0x742d35Cc6634C0532925a3b844Bc454e4438f44e');
-```
-
-### Solana 地址驗證
-
-Solana 地址驗證使用 `@solana/web3.js` 庫的 `PublicKey` 類，它會執行以下檢查：
-
-- 地址格式和長度驗證
-- Base58 編碼有效性檢查
-- Ed25519 密鑰對相關驗證
-
-```typescript
-import { PublicKey } from '@solana/web3.js';
-
-// 驗證 Solana 地址
-try {
-  new PublicKey('9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin');
-  console.log('Address is valid');
-} catch (error) {
-  console.error('Invalid address');
-}
-```
-
-這種使用專業 SDK 的驗證方法比簡單的正則表達式檢查更加可靠，能夠確保地址在密碼學上是有效的，從而提高應用程序的安全性。
+這些變更使模組結構更加清晰，並優化了服務間的交互方式，同時保留了強大的自動發現註冊機制。

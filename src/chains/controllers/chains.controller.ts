@@ -1,5 +1,5 @@
 import { Controller, Get, Param, NotFoundException } from '@nestjs/common';
-import { ChainServiceFactory } from '../services/chain-service.factory';
+import { ChainServiceFactory } from '../services/core/chain-service.factory';
 import { SUPPORTED_CHAINS } from '../constants';
 
 @Controller('chains')

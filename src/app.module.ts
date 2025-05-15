@@ -2,13 +2,12 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CoreModule } from './core/core.module';
-import { ChainsModule } from './chains';
 import { ProvidersModule } from './providers/providers.module';
 import { WebhookModule } from './webhook/webhook.module';
 import { ConfigsModule, AppConfigService } from './config';
 import { BalancesModule } from './balances/balances.module';
 import { ConfigModule } from '@nestjs/config';
-import { BlockchainModule } from './chains/blockchain.module';
+import { ChainsModule } from './chains/chains.module';
 import blockchainConfig from './config/blockchain.config';
 
 @Module({
@@ -19,11 +18,10 @@ import blockchainConfig from './config/blockchain.config';
     }),
     ConfigsModule,
     CoreModule,
-    ChainsModule,
     ProvidersModule,
     WebhookModule,
     BalancesModule,
-    BlockchainModule,
+    ChainsModule,
   ],
   controllers: [AppController],
   providers: [AppService, AppConfigService],

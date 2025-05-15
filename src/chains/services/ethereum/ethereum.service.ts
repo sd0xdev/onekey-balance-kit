@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { isAddress } from 'ethers';
 import { Chain } from '../../decorators/chain.decorator';
 import { ChainName } from '../../constants/index';
-import { AbstractChainService } from '../abstract-chain.service';
+import { AbstractChainService } from '../core/abstract-chain.service';
 import { EthereumChainId, ETH_SYMBOL, ETH_DECIMALS } from './constants';
 import { ProviderFactory } from '../../../providers/provider.factory';
 import { ProviderType } from '../../../providers/constants/blockchain-types';

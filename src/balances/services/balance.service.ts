@@ -1,12 +1,12 @@
 import { Injectable, Logger, Inject, Optional, Scope } from '@nestjs/common';
-import { CacheService } from '../cache/cache.service';
+import { CacheService } from '../../core/cache/cache.service';
 import { ChainName, COIN_SYMBOL_TO_CHAIN_MAP } from '../../chains/constants';
 import { ErrorCode } from '../../common/constants/error-codes';
 import {
   BalanceException,
   BlockchainException,
 } from '../../common/exceptions/application.exception';
-import { ChainServiceFactory } from '../../chains/services/chain-service.factory';
+import { ChainServiceFactory } from '../../chains/services/core/chain-service.factory';
 import { isBalanceQueryable } from '../../chains/interfaces/balance-queryable.interface';
 import { ProviderType } from '../../providers/constants/blockchain-types';
 import { REQUEST } from '@nestjs/core';

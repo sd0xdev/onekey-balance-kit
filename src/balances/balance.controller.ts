@@ -1,5 +1,5 @@
 import { Controller, Get, Param } from '@nestjs/common';
-import { BalanceService } from '../core/balance/balance.service';
+import { BalanceService } from './services/balance.service';
 import { UseBlockchainProvider } from '../chains/decorators/blockchain-provider.decorator';
 
 @Controller('balances')

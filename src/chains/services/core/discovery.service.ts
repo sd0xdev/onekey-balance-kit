@@ -1,9 +1,10 @@
 import { Injectable, Type } from '@nestjs/common';
-import { DiscoveryService as NestDiscoveryService, Reflector } from '@nestjs/core';
+import { DiscoveryService as NestDiscoveryService } from '@nestjs/core';
+import { MetadataScanner } from '@nestjs/core';
+import { Reflector } from '@nestjs/core';
 import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
-import { MetadataScanner } from '@nestjs/core/metadata-scanner';
-import { CHAIN_METADATA } from '../constants/index';
-import { ChainService } from '../interfaces/chain-service.interface';
+import { CHAIN_METADATA } from '../../constants/index';
+import { ChainService } from '../../interfaces/chain-service.interface';
 
 @Injectable()
 export class DiscoveryService {

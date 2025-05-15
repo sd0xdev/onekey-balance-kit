@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ChainService, ProviderAware } from '../interfaces/chain-service.interface';
+import { ChainService, ProviderAware } from '../../interfaces/chain-service.interface';
 
 @Injectable()
 export abstract class AbstractChainService implements ChainService, ProviderAware {

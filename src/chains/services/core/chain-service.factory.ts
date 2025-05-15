@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException, Type } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import { ChainService, ProviderAware } from '../interfaces/chain-service.interface';
+import { ChainService, ProviderAware } from '../../interfaces/chain-service.interface';
 import { DiscoveryService } from './discovery.service';
-import { COIN_SYMBOL_TO_CHAIN_MAP } from '../constants';
+import { COIN_SYMBOL_TO_CHAIN_MAP } from '../../constants';
 
 /**
  * ChainServiceFactory 是一個工廠類，用於創建和管理不同區塊鏈的服務實例

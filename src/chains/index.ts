@@ -8,21 +8,17 @@ export * from './interfaces/chain-service.interface';
 export * from './decorators/chain.decorator';
 
 // 匯出抽象類
-export * from './services/abstract-chain.service';
+export * from './services/core/abstract-chain.service';
 
 // 匯出工廠服務
-export * from './services/chain-service.factory';
-export * from './services/discovery.service';
+export * from './services/core/chain-service.factory';
+export * from './services/core/discovery.service';
 
 // 匯出控制器
 export * from './controllers/chains.controller';
 
 // 匯出主模組
-export * from './modules/chains.module';
-
-// 匯出鏈特定模組
-export * from './modules/ethereum/ethereum.module';
-export * from './modules/solana/solana.module';
+export * from './chains.module';
 
 // 匯出鏈特定服務
 export * from './services/ethereum/ethereum.service';

@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AppConfigService } from './config';
-import { BalanceService } from './core/balance/balance.service';
+import { BalanceService } from './balances/services/balance.service';
 
 // 創建一個模擬的 AppConfigService
 const mockAppConfigService = {

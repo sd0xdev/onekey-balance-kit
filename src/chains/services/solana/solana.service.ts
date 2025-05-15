@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PublicKey } from '@solana/web3.js';
 import { ProviderFactory } from '../../../providers/provider.factory';
-import { AbstractChainService } from '../abstract-chain.service';
+import { AbstractChainService } from '../core/abstract-chain.service';
 import { Chain } from '../../decorators/chain.decorator';
 import { ChainName } from '../../constants/index';
 import { SolanaCluster, SOL_SYMBOL, SOL_DECIMALS } from './constants';

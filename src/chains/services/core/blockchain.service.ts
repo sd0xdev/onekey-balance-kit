@@ -1,5 +1,5 @@
 import { Injectable, Scope } from '@nestjs/common';
-import { ChainService } from '../interfaces/chain-service.interface';
+import { ChainService } from '../../interfaces/chain-service.interface';
 import { ChainServiceFactory } from './chain-service.factory';
 import { RequestContextService } from './request-context.service';
 
