@@ -64,7 +64,7 @@ jobs:
             ENV_SUFFIX=""
             IMAGE_SUFFIX=""
             NODE_ENV="production"
-            MAX_INSTANCES=10
+            MAX_INSTANCES=2
             LOG_LEVEL=""
             API_BASE_URL="${{ vars.PROD_API_BASE_URL || 'https://api.example.com' }}"
             CORS_ORIGIN="${{ vars.PROD_CORS_ORIGIN || 'https://app.example.com' }}"
@@ -76,7 +76,7 @@ jobs:
             ENV_SUFFIX="-dev"
             IMAGE_SUFFIX="-dev"
             NODE_ENV="development"
-            MAX_INSTANCES=5
+            MAX_INSTANCES=1
             LOG_LEVEL="debug"
             API_BASE_URL="${{ vars.DEV_API_BASE_URL || 'https://api-dev.example.com' }}"
             CORS_ORIGIN="${{ vars.DEV_CORS_ORIGIN || '*' }}"

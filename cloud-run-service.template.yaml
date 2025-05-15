@@ -6,6 +6,7 @@ metadata:
     environment: ${ENVIRONMENT}
   annotations:
     run.googleapis.com/client-name: 'github-actions'
+    run.googleapis.com/ingress: 'all'
 spec:
   template:
     metadata:
