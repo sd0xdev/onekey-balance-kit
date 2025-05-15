@@ -322,6 +322,229 @@ A: 請參考[區塊鏈提供者](.cursor/rules/blockchain-providers.mdc)文檔�
 
 本項目基於 MIT 授權協議發布。完整授權條款請參見 [LICENSE](LICENSE) 文件。
 
+## CI/CD 部署配置
+
+此專案使用 GitHub Actions 進行持續整合和部署到 Google Cloud Run。
+
+### 前置要求
+
+1. Google Cloud 專案
+2. GitHub 倉庫權限
+3. gcloud CLI 工具
+
+### 初始設置
+
+在 Google Cloud 中設置所需資源：
+
+```bash
+# 複製此倉庫
+git clone <repository-url>
+cd one-key-balance-kit
+
+# 設置環境變數
+export PROJECT_ID=your-gcp-project-id
+export REGION=asia-east1
+
+# 執行設置腳本
+./scripts/setup-gcp.sh
+```
+
+### GitHub Secrets 和變數設置
+
+在你的 GitHub 倉庫中，添加以下 secrets：
+
+- `GCP_PROJECT_ID`: 你的 Google Cloud 專案 ID
+- `GCP_SERVICE_ACCOUNT`: 服務帳號電子郵件 (例如 `github-actions-runner@your-project-id.iam.gserviceaccount.com`)
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`: Workload Identity 提供者 (從設置腳本輸出中獲取)
+
+添加以下變數：
+
+- `GCP_REGION`: 部署區域 (例如 `asia-east1`)
+
+### 部署流程
+
+1. 當代碼推送到 `main` 分支時，GitHub Actions 會自動觸發部署。
+2. 工作流程執行以下步驟：
+   - 檢查代碼
+   - 使用 Workload Identity Federation 進行身份驗證
+   - 構建 Docker 映像
+   - 掃描映像中的漏洞
+   - 將映像推送到 Artifact Registry
+   - 部署到 Cloud Run
+
+### 手動觸發部署
+
+可以在 GitHub Actions 頁面手動觸發部署流程。
+
+### 版本管理
+
+- 每個部署都會使用 Git SHA 作為容器標籤
+- 最新部署也會被標記為 `latest`
+
+### 安全最佳實踐
+
+- 使用 Workload Identity Federation 而非服務帳號金鑰
+- 遵循最小權限原則設置服務帳號
+- 容器映像的自動漏洞掃描
+- 使用多階段建構來減少容器映像大小
+- 容器中使用非 root 使用者
+
+### 環境變數與密鑰管理
+
+本專案使用 Google Cloud Secret Manager 來安全管理敏感資訊。以下是設置環境變數和密鑰的步驟：
+
+#### 設置機密資訊到 Secret Manager
+
+1. 準備一個環境變數檔案（例如 `.env.production` 或 `.env.development`）
+2. 使用提供的腳本將環境變數上傳到 Secret Manager：
+
+```bash
+# 設置環境變數
+export PROJECT_ID=your-gcp-project-id
+export SERVICE_ACCOUNT_NAME=github-actions-runner
+
+# 使用預設 .env.example 檔案
+./scripts/setup-secrets.sh
+
+# 或指定特定環境檔案
+./scripts/setup-secrets.sh .env.production
+```
+
+#### GitHub Actions 中的環境變數
+
+在 GitHub Actions 工作流程中，環境變數分為兩類：
+
+1. **非敏感資訊**：直接使用 `env_vars` 在工作流程中設置
+2. **敏感資訊**：通過 `secrets` 從 Secret Manager 引用
+
+例如：
+
+```yaml
+# 非敏感資訊
+env_vars: |
+  NODE_ENV=production
+  SERVICE_NAME=one-key-balance-kit
+
+# 敏感資訊（從 Secret Manager 獲取）
+secrets: |
+  REDIS_CONNECTION_STRING=REDIS_CONNECTION_STRING:latest
+  MONGO_CONNECTION_STRING=MONGO_CONNECTION_STRING:latest
+```
+
+#### GitHub Repository 設置
+
+在 GitHub 倉庫中設置以下變數：
+
+1. **Repository Variables**（在 Settings > Secrets and variables > Actions > Variables）：
+
+   - `GCP_REGION`: 部署區域（例如 `asia-east1`）
+   - `DEV_API_BASE_URL`: 開發環境 API 基礎 URL
+   - `PROD_API_BASE_URL`: 生產環境 API 基礎 URL
+
+2. **Repository Secrets**（在 Settings > Secrets and variables > Actions > Secrets）：
+   - `GCP_PROJECT_ID`: Google Cloud 專案 ID
+   - `GCP_SERVICE_ACCOUNT`: 服務帳號
+   - `GCP_WORKLOAD_IDENTITY_PROVIDER`: Workload Identity 提供者
+
+## 部署配置
+
+本專案使用單一模板檔案進行 Cloud Run 服務配置，並在部署時根據環境動態生成實際配置：
+
+- `cloud-run-service.template.yaml` - 服務配置模板
+
+### 部署方式
+
+有兩種部署方式：
+
+#### 1. 使用 GitHub Actions (CI/CD)
+
+統一的 GitHub Actions 工作流程會自動在以下情況觸發部署：
+
+- 推送到 `main` 分支 - 部署到生產環境
+- 推送到 `develop` 分支 - 部署到開發環境
+
+也可以在 GitHub 上手動觸發工作流程並選擇目標環境。
+
+#### 2. 手動部署
+
+使用以下命令手動部署：
+
+```bash
+# 生成配置文件 - 生產環境
+cat cloud-run-service.template.yaml | sed \
+  -e "s|\${ENV_SUFFIX}||g" \
+  -e "s|\${ENVIRONMENT}|production|g" \
+  -e "s|\${MAX_INSTANCES}|10|g" \
+  -e "s|\${REGION}|asia-east1|g" \
+  -e "s|\${PROJECT_ID}|YOUR_PROJECT_ID|g" \
+  -e "s|\${IMAGE_SUFFIX}||g" \
+  -e "s|\${IMAGE_TAG}|latest|g" \
+  -e "s|\${NODE_ENV}|production|g" \
+  -e "s|\${LOG_LEVEL}||g" \
+  -e "s|\${API_BASE_URL}|https://api.example.com|g" \
+  -e "s|\${CORS_ORIGIN}|https://app.example.com|g" \
+  -e "s|\${SECRET_PREFIX}|production|g" \
+  > cloud-run-service-generated.yaml
+
+# 部署生成的配置
+gcloud run services replace cloud-run-service-generated.yaml --region=asia-east1
+
+# 對於開發環境，只需更改替換變數的值
+```
+
+### 環境變數與密鑰
+
+所有環境變數和密鑰引用都在模板檔案中使用佔位符定義，部署前會動態替換：
+
+- `${ENV_SUFFIX}`: 環境後綴 (生產為空，開發為 `-dev`)
+- `${ENVIRONMENT}`: 環境名稱 (`production` 或 `staging`)
+- `${MAX_INSTANCES}`: 最大實例數 (生產為 `10`，開發為 `5`)
+- `${NODE_ENV}`: Node.js 環境 (`production` 或 `development`)
+- `${SECRET_PREFIX}`: 密鑰前綴 (`production` 或 `staging`)
+
+使用 `scripts/setup-secrets.sh` 腳本設置密鑰。
+
+### 本地測試配置生成
+
+在推送到 GitHub 觸發 CI/CD 之前，可以在本地測試配置模板的替換是否正確：
+
+```bash
+# 測試生成開發環境配置
+cat cloud-run-service.template.yaml | sed \
+  -e "s|\${ENV_SUFFIX}|-dev|g" \
+  -e "s|\${ENVIRONMENT}|staging|g" \
+  -e "s|\${MAX_INSTANCES}|5|g" \
+  -e "s|\${REGION}|asia-east1|g" \
+  -e "s|\${PROJECT_ID}|你的專案ID|g" \
+  -e "s|\${IMAGE_SUFFIX}|-dev|g" \
+  -e "s|\${IMAGE_TAG}|latest|g" \
+  -e "s|\${NODE_ENV}|development|g" \
+  -e "s|\${LOG_LEVEL}|debug|g" \
+  -e "s|\${API_BASE_URL}|https://api-dev.example.com|g" \
+  -e "s|\${CORS_ORIGIN}|\*|g" \
+  -e "s|\${SECRET_PREFIX}|staging|g" \
+  > test-generated.yaml
+
+# 查看生成的配置
+cat test-generated.yaml
+
+# 檢查配置是否有語法錯誤
+gcloud run services replace test-generated.yaml --region=asia-east1 --dry-run
+
+# 完成檢查後刪除測試配置
+rm test-generated.yaml
+```
+
+這種測試方法可以確保模板替換正常工作，避免在 CI/CD 管道中遇到意外問題。特別是當你修改模板文件或添加新的環境變數時，這種預先測試尤為重要。
+
+此方法的優點：
+
+- 只需維護一份模板檔案
+- 環境差異通過變數參數化
+- 自動化部署流程處理環境差異
+- 減少重複配置的風險
+- 更容易擴展到新環境
+
 ---
 
 <p align="center">Made with ❤️ by <a href="https://github.com/sd0xdev">SD0</a></p>

@@ -1,0 +1,50 @@
+# 源碼控制
+.git
+.github
+.gitignore
+
+# 開發環境
+.vscode
+.cursor
+.idea
+.editorconfig
+.nvmrc
+.node-version
+
+# Node.js
+node_modules
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# 建置輸出
+dist
+build
+coverage
+
+# 測試
+test
+coverage
+*.spec.ts
+*.test.ts
+jest.config.js
+
+# 部署相關
+Dockerfile
+.dockerignore
+*.md
+LICENSE
+docker-compose*.yml
+cloud-run-service.yaml
+
+# 開發工具配置
+.prettierrc
+.lintstagedrc
+.husky
+eslint.config.mjs
+
+# 其他
+*.log
+*.env*
+!.env.example

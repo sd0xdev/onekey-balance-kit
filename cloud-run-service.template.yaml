@@ -1,0 +1,208 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: one-key-balance-kit${ENV_SUFFIX}
+  labels:
+    environment: ${ENVIRONMENT}
+  annotations:
+    run.googleapis.com/client-name: 'github-actions'
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: '0'
+        autoscaling.knative.dev/maxScale: '${MAX_INSTANCES}'
+        run.googleapis.com/cpu-throttling: 'true'
+        run.googleapis.com/execution-environment: 'gen2'
+        run.googleapis.com/vpc-access-egress: 'private-ranges-only'
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+        - image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/one-key-balance-kit/api${IMAGE_SUFFIX}:${IMAGE_TAG}
+          ports:
+            - containerPort: 3000
+          resources:
+            limits:
+              cpu: '1'
+              memory: '1Gi'
+          env:
+            - name: NODE_ENV
+              value: ${NODE_ENV}
+            - name: PORT
+              value: '3000'
+            - name: APP_NAME
+              value: one-key-balance-kit${ENV_SUFFIX}
+            - name: LOG_LEVEL
+              value: '${LOG_LEVEL}'
+            - name: API_BASE_URL
+              value: ${API_BASE_URL}
+            - name: CORS_ORIGIN
+              value: ${CORS_ORIGIN}
+            - name: NETWORK_TIMEOUT
+              value: '30000'
+            - name: NETWORK_RETRIES
+              value: '3'
+            # 密鑰引用
+            - name: MONGO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_MONGO_URL
+                  key: latest
+            - name: MONGO_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_MONGO_HOST
+                  key: latest
+            - name: MONGO_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_MONGO_PORT
+                  key: latest
+            - name: MONGO_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_MONGO_USERNAME
+                  key: latest
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_MONGO_PASSWORD
+                  key: latest
+            - name: MONGO_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_MONGO_DATABASE
+                  key: latest
+            - name: REDIS_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_REDIS_HOST
+                  key: latest
+            - name: REDIS_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_REDIS_PORT
+                  key: latest
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_REDIS_PASSWORD
+                  key: latest
+            - name: REDIS_DB
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_REDIS_DB
+                  key: latest
+            - name: RPC_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_RPC_URL
+                  key: latest
+            - name: CHAIN_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_CHAIN_ID
+                  key: latest
+            - name: ALCHEMY_API_KEY_ETH
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_ETH
+                  key: latest
+            - name: ALCHEMY_API_KEY_ETH_MAINNET
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_ETH_MAINNET
+                  key: latest
+            - name: ALCHEMY_API_KEY_ETH_TESTNET
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_ETH_TESTNET
+                  key: latest
+            - name: ALCHEMY_API_KEY_SOL
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_SOL
+                  key: latest
+            - name: ALCHEMY_API_KEY_SOL_MAINNET
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_SOL_MAINNET
+                  key: latest
+            - name: ALCHEMY_API_KEY_SOL_TESTNET
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_SOL_TESTNET
+                  key: latest
+            - name: ALCHEMY_API_KEY_POLYGON
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_POLYGON
+                  key: latest
+            - name: ALCHEMY_API_KEY_POLYGON_MAINNET
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_POLYGON_MAINNET
+                  key: latest
+            - name: ALCHEMY_API_KEY_POLYGON_TESTNET
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_POLYGON_TESTNET
+                  key: latest
+            - name: QUICKNODE_ETH_MAINNET_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_QUICKNODE_ETH_MAINNET_URL
+                  key: latest
+            - name: QUICKNODE_ETH_TESTNET_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_QUICKNODE_ETH_TESTNET_URL
+                  key: latest
+            - name: OKX_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_OKX_API_KEY
+                  key: latest
+            - name: OKX_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_OKX_SECRET_KEY
+                  key: latest
+            - name: OKX_API_PASSPHRASE
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_OKX_API_PASSPHRASE
+                  key: latest
+            - name: OKX_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_OKX_PROJECT_ID
+                  key: latest
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_API_KEY
+                  key: latest
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            periodSeconds: 5
+            failureThreshold: 3
+  traffic:
+    - percent: 100
+      latestRevision: true

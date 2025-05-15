@@ -1,0 +1,159 @@
+name: Deploy to Google Cloud Run
+
+on:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '部署環境 (production/staging)'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - production
+          - staging
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+
+    # 根據觸發方式決定環境
+    env:
+      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION || 'asia-east1' }}
+      ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}
+      BRANCH: ${{ github.ref_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 設置環境特定變數
+      - name: Set Environment Variables
+        id: env_vars
+        run: |
+          if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
+            echo "ENV_SUFFIX=" >> $GITHUB_ENV
+            echo "IMAGE_SUFFIX=" >> $GITHUB_ENV
+            echo "NODE_ENV=production" >> $GITHUB_ENV
+            echo "MAX_INSTANCES=10" >> $GITHUB_ENV
+            echo "LOG_LEVEL=" >> $GITHUB_ENV
+            echo "API_BASE_URL=${{ vars.PROD_API_BASE_URL || 'https://api.example.com' }}" >> $GITHUB_ENV
+            echo "CORS_ORIGIN=${{ vars.PROD_CORS_ORIGIN || 'https://app.example.com' }}" >> $GITHUB_ENV
+            echo "SECRET_PREFIX=production" >> $GITHUB_ENV
+            echo "SERVICE_NAME=one-key-balance-kit" >> $GITHUB_ENV
+            echo "CACHE_TTL=3600" >> $GITHUB_ENV
+            echo "DEPLOY_TAG=" >> $GITHUB_ENV
+          else
+            echo "ENV_SUFFIX=-dev" >> $GITHUB_ENV
+            echo "IMAGE_SUFFIX=-dev" >> $GITHUB_ENV
+            echo "NODE_ENV=development" >> $GITHUB_ENV
+            echo "MAX_INSTANCES=5" >> $GITHUB_ENV
+            echo "LOG_LEVEL=debug" >> $GITHUB_ENV
+            echo "API_BASE_URL=${{ vars.DEV_API_BASE_URL || 'https://api-dev.example.com' }}" >> $GITHUB_ENV
+            echo "CORS_ORIGIN=${{ vars.DEV_CORS_ORIGIN || '*' }}" >> $GITHUB_ENV
+            echo "SECRET_PREFIX=staging" >> $GITHUB_ENV
+            echo "SERVICE_NAME=one-key-balance-kit-dev" >> $GITHUB_ENV
+            echo "CACHE_TTL=1800" >> $GITHUB_ENV
+            echo "DEPLOY_TAG=--tag=dev" >> $GITHUB_ENV
+          fi
+
+          # 共用變數
+          echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+
+          # 輸出環境信息
+          echo "部署到 ${{ env.ENVIRONMENT }} 環境"
+          echo "分支: ${{ env.BRANCH }}"
+
+      - name: Google Auth
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      # 配置 Docker 認證以使用 GCP 的 Artifact Registry
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+      # 構建多架構 Docker 映像
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/one-key-balance-kit/api${{ env.IMAGE_SUFFIX }}:${{ github.sha }}
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/one-key-balance-kit/api${{ env.IMAGE_SUFFIX }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NODE_ENV=${{ env.NODE_ENV }}
+
+      # 掃描容器映像中的漏洞
+      - name: Scan Docker image for vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/one-key-balance-kit/api${{ env.IMAGE_SUFFIX }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      # 準備部署配置 - 動態替換模板變數
+      - name: Generate deployment YAML
+        run: |
+          # 替換模板中的變數
+          cat cloud-run-service.template.yaml | sed \
+            -e "s|\${ENV_SUFFIX}|${{ env.ENV_SUFFIX }}|g" \
+            -e "s|\${ENVIRONMENT}|${{ env.ENVIRONMENT }}|g" \
+            -e "s|\${MAX_INSTANCES}|${{ env.MAX_INSTANCES }}|g" \
+            -e "s|\${REGION}|${{ env.REGION }}|g" \
+            -e "s|\${PROJECT_ID}|${{ env.PROJECT_ID }}|g" \
+            -e "s|\${IMAGE_SUFFIX}|${{ env.IMAGE_SUFFIX }}|g" \
+            -e "s|\${IMAGE_TAG}|${{ env.IMAGE_TAG }}|g" \
+            -e "s|\${NODE_ENV}|${{ env.NODE_ENV }}|g" \
+            -e "s|\${LOG_LEVEL}|${{ env.LOG_LEVEL }}|g" \
+            -e "s|\${API_BASE_URL}|${{ env.API_BASE_URL }}|g" \
+            -e "s|\${CORS_ORIGIN}|${{ env.CORS_ORIGIN }}|g" \
+            -e "s|\${SECRET_PREFIX}|${{ env.SECRET_PREFIX }}|g" \
+            > cloud-run-service-generated.yaml
+
+          # 顯示生成的 YAML 文件前10行
+          echo "生成的 YAML 文件前10行:"
+          head -n 10 cloud-run-service-generated.yaml
+
+      # 部署到 Cloud Run
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        continue-on-error: true
+        with:
+          metadata: cloud-run-service-generated.yaml
+          region: ${{ env.REGION }}
+
+      # 檢查部署狀態
+      - name: Check Deployment Status
+        if: steps.deploy.outcome == 'failure'
+        run: |
+          echo "部署失敗，請檢查錯誤日誌"
+          exit 1
+
+      # 輸出部署 URL
+      - name: Show Output
+        run: |
+          echo "${{ env.ENVIRONMENT }} 環境 URL: ${{ steps.deploy.outputs.url }}"
