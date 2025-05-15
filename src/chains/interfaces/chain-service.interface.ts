@@ -37,4 +37,9 @@ export interface ChainService {
    * 獲取鏈名稱
    */
   getChainName(): string;
+
+  /**
+   * 獲取鏈的代幣符號
+   */
+  getChainSymbol(): string;
 }

@@ -31,6 +31,7 @@ export enum ErrorCode {
   // 餘額相關錯誤 (4000-4999)
   BALANCE_FETCH_FAILED = 'BALANCE_FETCH_FAILED',
   BALANCE_PARSING_ERROR = 'BALANCE_PARSING_ERROR',
+  BALANCE_CHAIN_NOT_SUPPORTED = 'BALANCE_CHAIN_NOT_SUPPORTED',
 
   // 快取相關錯誤 (5000-5999)
   CACHE_SET_FAILED = 'CACHE_SET_FAILED',
@@ -140,6 +141,11 @@ export const ERROR_MAPPINGS: Record<ErrorCode, ErrorDetails> = {
     httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
     message: '餘額資料解析錯誤',
     exposureLevel: 'hidden',
+  },
+  [ErrorCode.BALANCE_CHAIN_NOT_SUPPORTED]: {
+    httpStatus: HttpStatus.BAD_REQUEST,
+    message: '該區塊鏈不支援餘額查詢',
+    exposureLevel: 'public',
   },
 
   // 快取相關錯誤

@@ -6,11 +6,17 @@ import { AbstractChainService } from '../abstract-chain.service';
 import { Chain } from '../../decorators/chain.decorator';
 import { ChainName } from '../../constants/index';
 import { SolanaCluster, SOL_SYMBOL, SOL_DECIMALS } from './constants';
+import { BlockchainType, ProviderType } from '../../../providers/constants/blockchain-types';
+import { NetworkType } from '../../../providers/interfaces/blockchain-provider.interface';
+import {
+  BalanceableChainService,
+  BalanceResponse,
+} from '../../interfaces/balanceable-chain.interface';
 
 /**
  * Solana 餘額響應介面
  */
-export interface SolanaBalancesResponse {
+export interface SolanaBalancesResponse extends BalanceResponse {
   cluster: SolanaCluster;
   nativeBalance: {
     symbol: string;
@@ -43,7 +49,7 @@ export interface SolanaBalancesResponse {
 
 @Injectable()
 @Chain(ChainName.SOLANA)
-export class SolanaService extends AbstractChainService {
+export class SolanaService extends AbstractChainService implements BalanceableChainService {
   protected readonly chainType = 'solana';
 
   constructor(
@@ -55,6 +61,10 @@ export class SolanaService extends AbstractChainService {
 
   getChainName(): string {
     return ChainName.SOLANA;
+  }
+
+  getChainSymbol(): string {
+    return SOL_SYMBOL;
   }
 
   isValidAddress(address: string): boolean {
@@ -99,13 +109,71 @@ export class SolanaService extends AbstractChainService {
 
       // 使用傳入的參數確定使用哪個集群
       const cluster = useTestnet ? SolanaCluster.TESTNET : SolanaCluster.MAINNET;
+      const networkType = useTestnet ? NetworkType.TESTNET : NetworkType.MAINNET;
       this.logInfo(`Cluster: ${cluster}`);
 
-      // 模擬異步操作
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      // 獲取配置中設定的提供者類型，如果未設定則使用默認值
+      const configProviderType = this.configService.get<string>('PROVIDER_SOLANA');
+      const providerType = configProviderType || ProviderType.ALCHEMY;
 
-      // 此處將實現獲取餘額的實際邏輯
-      // 示例返回
+      try {
+        // 從提供者工廠獲取 Solana 提供者
+        const provider = this.providerFactory.getProvider(BlockchainType.SOLANA, providerType);
+
+        if (provider && provider.isSupported()) {
+          this.logInfo(`Using ${provider.getProviderName()} provider for Solana`);
+
+          // 從提供者獲取餘額數據
+          const balancesResponse = await provider.getBalances(address, networkType);
+
+          // 檢查是否成功獲取餘額數據
+          if (balancesResponse.isSuccess === false) {
+            this.logError(`Provider error: ${balancesResponse.errorMessage}`);
+            throw new Error(balancesResponse.errorMessage || 'Failed to get balance from provider');
+          }
+
+          // 將提供者的響應轉換為 SolanaBalancesResponse 格式
+          return {
+            cluster,
+            nativeBalance: {
+              symbol: SOL_SYMBOL,
+              decimals: SOL_DECIMALS,
+              balance: balancesResponse.nativeBalance.balance,
+              usd: 0, // 可以從其他服務獲取價格
+            },
+            tokens: balancesResponse.tokens.map((token) => ({
+              mint: token.mint,
+              balance: token.balance,
+              tokenMetadata: {
+                symbol: token.tokenMetadata?.symbol || 'UNKNOWN',
+                decimals: token.tokenMetadata?.decimals || 9,
+                name: token.tokenMetadata?.name || 'Unknown Token',
+              },
+            })),
+            nfts: balancesResponse.nfts.map((nft) => ({
+              mint: nft.mint,
+              tokenId: nft.tokenId || '0',
+              tokenMetadata: {
+                name: nft.tokenMetadata?.name || 'Unknown NFT',
+                image: nft.tokenMetadata?.image || '',
+                collection: {
+                  name: nft.tokenMetadata?.collection?.name || 'Unknown Collection',
+                },
+              },
+            })),
+            updatedAt: Math.floor(Date.now() / 1000),
+          };
+        } else {
+          throw new Error(`Provider ${providerType} is not supported`);
+        }
+      } catch (providerError) {
+        this.logWarn(
+          `Provider error: ${String(providerError)}, falling back to default implementation`,
+        );
+      }
+
+      // 如果沒有可用的提供者或提供者調用失敗，使用默認實現
+      this.logInfo('Using default implementation for balances');
       return {
         cluster,
         nativeBalance: {

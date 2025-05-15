@@ -26,6 +26,11 @@ export abstract class AbstractChainService implements ChainService {
   abstract getChainName(): string;
 
   /**
+   * 獲取鏈代幣符號
+   */
+  abstract getChainSymbol(): string;
+
+  /**
    * 日誌記錄輔助方法
    */
   protected logInfo(message: string): void {

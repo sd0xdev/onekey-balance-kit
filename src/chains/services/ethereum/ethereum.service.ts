@@ -8,6 +8,10 @@ import { EthereumChainId, ETH_SYMBOL, ETH_DECIMALS } from './constants';
 import { ProviderFactory } from '../../../providers/provider.factory';
 import { ProviderType } from '../../../providers/constants/blockchain-types';
 import { NetworkType } from '../../../providers/interfaces/blockchain-provider.interface';
+import {
+  BalanceableChainService,
+  BalanceResponse,
+} from '../../interfaces/balanceable-chain.interface';
 
 // 定義 Fungible 類型 (用於最終輸出)
 interface Fungible {
@@ -28,9 +32,9 @@ interface Nft {
 }
 
 // 最終輸出的格式
-export interface EthereumBalancesResponse {
+export interface EthereumBalancesResponse extends BalanceResponse {
   chainId: number;
-  native: {
+  nativeBalance: {
     symbol: string;
     decimals: number;
     balance: string;
@@ -43,7 +47,7 @@ export interface EthereumBalancesResponse {
 
 @Injectable()
 @Chain(ChainName.ETHEREUM)
-export class EthereumService extends AbstractChainService {
+export class EthereumService extends AbstractChainService implements BalanceableChainService {
   constructor(
     protected readonly configService: ConfigService,
     private readonly providerFactory: ProviderFactory,
@@ -53,6 +57,10 @@ export class EthereumService extends AbstractChainService {
 
   getChainName(): string {
     return ChainName.ETHEREUM;
+  }
+
+  getChainSymbol(): string {
+    return ETH_SYMBOL;
   }
 
   isValidAddress(address: string): boolean {
@@ -135,7 +143,7 @@ export class EthereumService extends AbstractChainService {
           // 將提供者的響應轉換為 EthereumBalancesResponse 格式
           return {
             chainId: useTestnet ? EthereumChainId.SEPOLIA : EthereumChainId.MAINNET,
-            native: {
+            nativeBalance: {
               symbol: ETH_SYMBOL,
               decimals: ETH_DECIMALS,
               balance: balancesResponse.nativeBalance.balance,
@@ -171,7 +179,7 @@ export class EthereumService extends AbstractChainService {
       await new Promise((resolve) => setTimeout(resolve, 10));
       return {
         chainId: useTestnet ? EthereumChainId.SEPOLIA : EthereumChainId.MAINNET,
-        native: {
+        nativeBalance: {
           symbol: ETH_SYMBOL,
           decimals: ETH_DECIMALS,
           balance: '1000000000000000000', // 1 ETH

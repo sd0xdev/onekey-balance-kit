@@ -1,14 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CacheService } from '../cache/cache.service';
 import { ChainName, COIN_SYMBOL_TO_CHAIN_MAP } from '../../chains/constants';
-import { ProviderFactory } from '../../providers/provider.factory';
-import { BlockchainType, ProviderType } from '../../providers/constants/blockchain-types';
 import { ErrorCode } from '../../common/constants/error-codes';
 import {
   BalanceException,
   BlockchainException,
-  ProviderException,
 } from '../../common/exceptions/application.exception';
+import { ChainServiceFactory } from '../../chains/services/chain-service.factory';
+import { BalanceableChainService } from '../../chains/interfaces/balanceable-chain.interface';
 
 @Injectable()
 export class BalanceService {
@@ -16,7 +15,7 @@ export class BalanceService {
 
   constructor(
     private readonly cacheService: CacheService,
-    private readonly providerFactory: ProviderFactory,
+    private readonly chainServiceFactory: ChainServiceFactory,
   ) {}
 
   /**
@@ -57,60 +56,43 @@ export class BalanceService {
       this.logger.debug(`Cache miss for key ${cacheKey}`);
     }
 
-    // 2. 使用提供者工廠獲取對應的區塊鏈提供者實例
+    // 2. 使用链服务工厂获取对应的链服务
     try {
-      // 將 ChainName 轉換為 BlockchainType
-      const blockchainType = this.mapChainNameToBlockchainType(chain);
+      // 获取对应链的服务实例
+      const chainService = this.chainServiceFactory.getChainService(chain);
+      this.logger.debug(`Using chain service: ${chainService.getChainName()}`);
 
-      // 特別處理: 明確指定使用 ALCHEMY 提供者
-      const provider = this.providerFactory.getProvider(blockchainType, ProviderType.ALCHEMY);
-
-      this.logger.debug(`Using provider: ${provider.getProviderName()} for ${blockchainType}`);
-
-      // 獲取區塊鏈配置
-      const chainConfig = provider.getChainConfig();
-
-      // 調用提供者的 getBalances 方法獲取餘額數據
-      const balanceData = await provider.getBalances(address);
-
-      // 檢查是否成功獲取餘額數據
-      if (balanceData.isSuccess === false) {
-        // 根據錯誤訊息分類拋出不同類型的異常
-        const errorMsg = balanceData.errorMessage || '未知錯誤';
-
-        if (errorMsg.includes('401 Unauthorized') || errorMsg.includes('Must be authenticated')) {
-          throw new ProviderException(ErrorCode.PROVIDER_AUTH_FAILED, errorMsg);
-        } else if (errorMsg.includes('Invalid') && errorMsg.includes('address')) {
-          throw new BlockchainException(ErrorCode.BLOCKCHAIN_INVALID_ADDRESS, errorMsg);
-        } else {
-          throw new BalanceException(ErrorCode.BALANCE_FETCH_FAILED, errorMsg);
-        }
+      if (!chainService.isValidAddress(address)) {
+        throw new BlockchainException(
+          ErrorCode.BLOCKCHAIN_INVALID_ADDRESS,
+          `Invalid ${chain} address: ${address}`,
+        );
       }
 
-      // 3. 組裝結果數據
+      // 確保鏈服務實現了 BalanceableChainService 介面
+      if (!this.isBalanceableChainService(chainService)) {
+        throw new BalanceException(
+          ErrorCode.BALANCE_CHAIN_NOT_SUPPORTED,
+          `Chain ${chain} does not support balance queries`,
+        );
+      }
+
+      // 調用鏈服務的 getBalances 方法獲取餘額
+      const balanceData = await chainService.getBalances(address);
+
+      if (!balanceData) {
+        throw new BalanceException(
+          ErrorCode.BALANCE_FETCH_FAILED,
+          `Failed to get balance for ${chain}:${address}`,
+        );
+      }
+
+      // 3. 組裝結果數據 (确保统一的接口)
       const result = {
-        chainId: chainConfig.chainId,
-        chainName: chainConfig.name,
-        native: {
-          balance: balanceData.nativeBalance.balance,
-          symbol: chainConfig.nativeSymbol,
-          decimals: chainConfig.nativeDecimals,
-        },
-        fungibles: balanceData.tokens.map((token) => ({
-          mint: token.mint,
-          balance: token.balance,
-          symbol: token.tokenMetadata?.symbol || 'Unknown',
-          decimals: token.tokenMetadata?.decimals || 0,
-          name: token.tokenMetadata?.name || 'Unknown Token',
-        })),
-        nfts: balanceData.nfts.map((nft) => ({
-          mint: nft.mint,
-          tokenId: nft.tokenId || '',
-          name: nft.tokenMetadata?.name || 'Unknown NFT',
-          collection: nft.tokenMetadata?.collection?.name || '',
-          image: nft.tokenMetadata?.image || '',
-        })),
-        updatedAt: Math.floor(Date.now() / 1000),
+        // 使用链服务返回的数据
+        ...balanceData,
+        // 确保更新时间戳
+        updatedAt: balanceData.updatedAt || Math.floor(Date.now() / 1000),
       };
 
       // 只有成功獲取數據時才緩存結果
@@ -124,25 +106,11 @@ export class BalanceService {
   }
 
   /**
-   * 將 ChainName 映射到 BlockchainType
-   * @param chainName 鏈名稱
-   * @returns 區塊鏈類型
+   * 檢查鏈服務是否實現了 BalanceableChainService 介面
+   * @param service 鏈服務
+   * @returns 是否實現了 BalanceableChainService 介面
    */
-  private mapChainNameToBlockchainType(chainName: ChainName): BlockchainType {
-    const chainToBlockchainMap = {
-      [ChainName.ETHEREUM]: BlockchainType.ETHEREUM,
-      [ChainName.SOLANA]: BlockchainType.SOLANA,
-      // 可以根據需要擴展更多映射
-    };
-
-    const blockchainType = chainToBlockchainMap[chainName];
-    if (!blockchainType) {
-      throw new BlockchainException(
-        ErrorCode.BLOCKCHAIN_INVALID_CHAIN,
-        `無法將 ${chainName} 映射到對應的區塊鏈類型`,
-      );
-    }
-
-    return blockchainType;
+  private isBalanceableChainService(service: any): service is BalanceableChainService {
+    return 'getBalances' in service && typeof service.getBalances === 'function';
   }
 }

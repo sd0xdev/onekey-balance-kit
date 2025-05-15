@@ -2,10 +2,10 @@ import { Module } from '@nestjs/common';
 import { BalanceService } from './balance.service';
 import { CacheModule } from '../cache/cache.module';
 import { ConfigsModule } from '../../config';
-import { ProvidersModule } from '../../providers/providers.module';
+import { ChainsModule } from '../../chains/modules/chains.module';
 
 @Module({
-  imports: [ConfigsModule, CacheModule, ProvidersModule],
+  imports: [ConfigsModule, CacheModule, ChainsModule],
   providers: [BalanceService],
   exports: [BalanceService],
 })
