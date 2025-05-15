@@ -15,6 +15,7 @@ export enum ProviderType {
   RPC = 'rpc',
   INFURA = 'infura',
   QUICKNODE = 'quicknode',
+  OKX = 'okx',
 }
 
 /**

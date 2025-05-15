@@ -1,5 +1,5 @@
 ---
-description:
+description: 區塊鏈服務模組
 globs:
 alwaysApply: false
 ---

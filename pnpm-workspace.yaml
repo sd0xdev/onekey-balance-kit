@@ -1,0 +1,4 @@
+onlyBuiltDependencies:
+  - keccak
+  - protobufjs
+  - secp256k1
