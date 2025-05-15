@@ -1,6 +1,6 @@
 # 鏈服務模組 (Chain Services)
 
-本模組提供了一個統一的方式來處理不同區塊鏈的操作，使用混合架構結合工廠模式和裝飾器自動註冊機制。
+本模組提供了一個統一的方式來處理不同區塊鏈的操作，使用混合架構結合工廠模式、裝飾器自動註冊機制和代理模式。
 
 ## 目錄結構
 
@@ -8,12 +8,19 @@
 src/chains/
 ├── interfaces/            # 介面定義
 │   └── chain-service.interface.ts  # 鏈服務介面
+│   └── balance-queryable.interface.ts  # 餘額查詢介面
 ├── decorators/            # 裝飾器定義
-│   └── chain.decorator.ts # 鏈服務裝飾器
+│   └── chain.decorator.ts            # 鏈服務裝飾器
+│   └── blockchain-provider.decorator.ts  # 區塊鏈提供者裝飾器
+│   └── blockchain-provider-param.decorator.ts  # 提供者參數裝飾器
+├── interceptors/          # 攔截器
+│   └── blockchain-provider.interceptor.ts  # 區塊鏈提供者攔截器
 ├── services/              # 服務實現
 │   ├── abstract-chain.service.ts   # 抽象鏈服務基類
 │   ├── chain-service.factory.ts    # 鏈服務工廠
 │   ├── discovery.service.ts        # 裝飾器發現服務
+│   ├── blockchain.service.ts       # 區塊鏈服務
+│   ├── request-context.service.ts  # 請求上下文服務
 │   ├── ethereum/                   # 以太坊服務
 │   │   └── ethereum.service.ts
 │   └── solana/                     # Solana 服務
@@ -28,6 +35,7 @@ src/chains/
 │       └── solana.module.ts
 ├── constants/             # 常量定義
 │   └── index.ts                    # 鏈相關常量
+├── blockchain.module.ts   # 區塊鏈模組
 ├── index.ts               # 入口檔案
 └── README.md              # 本文檔
 ```
@@ -40,7 +48,8 @@ src/chains/
 2. **抽象基類**：`AbstractChainService` 提供了基本實現和輔助方法。
 3. **工廠模式**：`ChainServiceFactory` 負責創建和管理不同鏈的服務實例。
 4. **裝飾器發現**：使用 `@Chain()` 裝飾器和 `DiscoveryService` 自動發現並註冊鏈服務。
-5. **模組化**：各個鏈有自己獨立的模組和服務實現。
+5. **代理模式**：使用 `getChainServiceWithProvider` 創建代理對象，動態切換區塊鏈提供者而不改變原服務默認值。
+6. **請求級別的提供者選擇**：使用 `@UseBlockchainProvider()` 裝飾器和攔截器動態選擇區塊鏈提供者。
 
 這種混合架構具有以下優點：
 
@@ -48,65 +57,122 @@ src/chains/
 - **易於擴展**：新增鏈只需實現介面並添加 `@Chain()` 裝飾器。
 - **自動發現**：通過裝飾器自動註冊服務，減少手動配置。
 - **靈活性**：同時支持自動和手動註冊，滿足不同需求。
+- **動態提供者選擇**：能夠動態切換區塊鏈提供者而不改變服務的默認設置。
+- **請求級別隔離**：不同請求可以使用不同的區塊鏈提供者而不互相影響。
+
+## 區塊鏈提供者處理
+
+本模組引入了一個新的區塊鏈提供者處理機制，允許在不同級別選擇區塊鏈提供者：
+
+### 提供者選擇優先級
+
+1. **查詢參數**：請求查詢參數中的 `provider` 參數優先級最高
+2. **方法裝飾器**：在控制器方法上使用的 `@UseBlockchainProvider()` 裝飾器次之
+3. **控制器裝飾器**：在控制器類上使用的 `@UseBlockchainProvider()` 裝飾器再次之
+4. **配置文件**：從配置文件中讀取的默認提供者最後
+5. **硬編碼默認值**：如果以上都沒有設置，則使用硬編碼的默認值
+
+### 區塊鏈提供者裝飾器
+
+使用 `@UseBlockchainProvider()` 裝飾器可以指定要使用的區塊鏈提供者：
+
+```typescript
+// 在控制器級別設置默認提供者
+@Controller('chains')
+@UseBlockchainProvider('alchemy')
+export class ChainsController {
+  // 所有方法默認使用 'alchemy' 提供者
+
+  // 在方法級別覆蓋提供者設置
+  @Get('eth/:address/balance')
+  @UseBlockchainProvider('quicknode')
+  getEthereumBalance(@Param('address') address: string) {
+    // 使用 'quicknode' 提供者
+  }
+}
+```
+
+### 提供者代理
+
+當使用 `getChainServiceWithProvider` 方法時，ChainServiceFactory 會創建一個原始服務的代理，該代理會在保持原始服務默認提供者不變的情況下使用指定的提供者：
+
+```typescript
+// 獲取使用 'quicknode' 提供者的以太坊服務代理
+const ethService = chainServiceFactory.getChainServiceWithProvider('ethereum', 'quicknode');
+
+// 原始服務的默認提供者保持不變
+const originalService = chainServiceFactory.getChainService('ethereum');
+```
 
 ## 使用方式
 
 ### 1. 導入模組
 
-在應用的主模組中導入 `ChainsModule`：
+在應用的主模組中導入 `BlockchainModule`：
 
 ```typescript
 import { Module } from '@nestjs/common';
-import { ChainsModule } from './chains';
+import { BlockchainModule } from './chains/blockchain.module';
 
 @Module({
-  imports: [ChainsModule],
+  imports: [BlockchainModule],
 })
 export class AppModule {}
 ```
 
-### 2. 使用工廠服務
+### 2. 使用區塊鏈服務
 
-通過依賴注入使用 `ChainServiceFactory`：
+通過依賴注入使用 `BlockchainService`：
 
 ```typescript
 import { Injectable } from '@nestjs/common';
-import { ChainServiceFactory, ChainName } from './chains';
+import { BlockchainService } from './chains/services/blockchain.service';
 
 @Injectable()
 export class YourService {
-  constructor(private readonly chainServiceFactory: ChainServiceFactory) {}
+  constructor(private readonly blockchainService: BlockchainService) {}
 
   async someMethod() {
-    // 獲取特定鏈的服務 - 可以使用鏈名稱
-    const ethereumService = this.chainServiceFactory.getChainService(ChainName.ETHEREUM);
-    const solanaService = this.chainServiceFactory.getChainService(ChainName.SOLANA);
-
-    // 也可以使用代幣符號（不區分大小寫）
-    const ethereumServiceAlt = this.chainServiceFactory.getChainService('eth');
-    const solanaServiceAlt = this.chainServiceFactory.getChainService('sol');
+    // 獲取特定鏈的服務 - 會自動使用請求上下文中的提供者
+    const ethereumService = this.blockchainService.getService('ethereum');
 
     // 使用服務方法
     const isValid = ethereumService.isValidAddress('0x...');
-    const transactions = await solanaService.getAddressTransactionHashes('sol_address');
+    const balance = await ethereumService.getBalances('0x...');
   }
 }
 ```
 
-### 3. 使用 API 端點
+### 3. 在控制器中使用裝飾器
 
-鏈服務模組提供的 API 端點也支援使用代幣符號：
+```typescript
+import { Controller, Get, Param } from '@nestjs/common';
+import { UseBlockchainProvider } from './chains/decorators/blockchain-provider.decorator';
+import { BalanceService } from './core/balance/balance.service';
+
+@Controller('balances')
+export class BalanceController {
+  constructor(private readonly balanceService: BalanceService) {}
+
+  @Get(':chain/:address')
+  @UseBlockchainProvider('alchemy') // 設置預設提供者為 alchemy
+  getBalances(@Param('chain') chain: string, @Param('address') address: string) {
+    return this.balanceService.getPortfolio(chain, address);
+  }
+}
+```
+
+### 4. 客戶端指定提供者
+
+客戶端可以通過查詢參數指定提供者：
 
 ```
-// 使用鏈名稱
-GET /chains/ethereum/validate/0x742d35Cc6634C0532925a3b844Bc454e4438f44e
-
-// 或使用代幣符號（不區分大小寫）
-GET /chains/eth/validate/0x742d35Cc6634C0532925a3b844Bc454e4438f44e
-GET /chains/ETH/validate/0x742d35Cc6634C0532925a3b844Bc454e4438f44e
+GET /balances/ethereum/0x742d35Cc6634C0532925a3b844Bc454e4438f44e?provider=quicknode
 ```
 
-### 4. 添加新的鏈服務
+此請求會使用 quicknode 提供者而不是方法裝飾器中的默認值。
+
+### 5. 添加新的鏈服務
 
 要添加新的鏈服務，需要：
 
@@ -114,67 +180,39 @@ GET /chains/ETH/validate/0x742d35Cc6634C0532925a3b844Bc454e4438f44e
 
 ```typescript
 import { Injectable } from '@nestjs/common';
-import { AbstractChainService, Chain, ChainName } from '../chains';
+import { AbstractChainService } from '../services/abstract-chain.service';
+import { Chain } from '../decorators/chain.decorator';
+import { ChainName } from '../constants';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
-@Chain(ChainName.YOUR_CHAIN) // 使用裝飾器標記
+@Chain(ChainName.YOUR_CHAIN)
 export class YourChainService extends AbstractChainService {
-  getChainName(): string {
-    return ChainName.YOUR_CHAIN;
+  constructor(protected readonly configService: ConfigService) {
+    super();
+    // 從配置中獲取默認提供者
+    const defaultProvider = this.configService.get<string>('blockchain.defaultProvider', 'alchemy');
+    this.setDefaultProvider(defaultProvider);
   }
 
-  isValidAddress(address: string): boolean {
-    // 實現驗證邏輯
-    return true;
-  }
-
-  async getAddressTransactionHashes(address: string): Promise<string[]> {
-    // 實現獲取交易哈希的邏輯
-    return ['hash1', 'hash2'];
-  }
-
-  async getTransactionDetails(hash: string): Promise<any> {
-    // 實現獲取交易詳情的邏輯
-    return { hash, details: 'some details' };
-  }
+  // 實現必要的方法...
 }
 ```
 
-2. 在 `constants/index.ts` 中添加新的鏈類型：
+## 最佳實踐
 
-```typescript
-export enum ChainName {
-  ETHEREUM = 'ethereum',
-  SOLANA = 'solana',
-  YOUR_CHAIN = 'your_chain', // 添加新的鏈類型
-}
-```
+1. **使用抽象類**：繼承 `AbstractChainService` 而不是直接實現介面，以獲取通用功能。
+2. **使用請求作用域**：所有需要訪問請求上下文的服務應使用 `{ scope: Scope.REQUEST }` 進行注入。
+3. **裝飾器設置默認值**：使用 `@UseBlockchainProvider()` 裝飾器設置方法或控制器的默認提供者。
+4. **配置驅動**：使用配置文件設置系統級別的默認提供者。
+5. **允許客戶端覆蓋**：允許客戶端通過查詢參數覆蓋默認提供者設置。
 
-3. 創建模組並在其中提供服務：
+## 內部工作原理
 
-```typescript
-import { Module } from '@nestjs/common';
-import { YourChainService } from './your-chain.service';
-
-@Module({
-  providers: [YourChainService],
-  exports: [YourChainService],
-})
-export class YourChainModule {}
-```
-
-4. 在主鏈模組中導入新模組：
-
-```typescript
-import { Module } from '@nestjs/common';
-import { ChainsModule } from '../chains/modules/chains.module';
-import { YourChainModule } from './your-chain/your-chain.module';
-
-@Module({
-  imports: [ChainsModule, YourChainModule],
-})
-export class AppModule {}
-```
+1. **裝飾器和攔截器**：當請求到達時，`BlockchainProviderInterceptor` 會解析並設置請求上下文中的 `blockchainProvider`。
+2. **請求作用域服務**：`BlockchainService` 和 `BalanceService` 使用請求作用域，以訪問請求上下文。
+3. **服務代理**：當需要使用特定提供者時，`ChainServiceFactory` 會創建一個服務代理，該代理會覆蓋 `getDefaultProvider` 和 `setDefaultProvider` 方法。
+4. **工廠級緩存**：`ChainServiceFactory` 會緩存創建的服務和代理，以提高性能。
 
 ## API 端點
 

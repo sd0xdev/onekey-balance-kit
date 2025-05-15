@@ -65,6 +65,15 @@ class EnvironmentVariables {
   @IsString()
   API_KEY: string;
 
+  /* QUICKNODE CONFIG */
+  @IsOptional()
+  @IsUrl()
+  QUICKNODE_ETH_MAINNET_URL: string;
+
+  @IsOptional()
+  @IsUrl()
+  QUICKNODE_ETH_TESTNET_URL: string;
+
   /* NETWORK CONFIG */
   @IsNumber()
   NETWORK_TIMEOUT: number;

@@ -30,12 +30,9 @@ import { CacheableMemory } from 'cacheable';
 
             // 返回包含 Redis 設定的配置
             return {
-              // 設定儲存引擎：主要使用 Redis，並帶上記憶體 fallback
               stores: [
                 // primary Redis store
                 createKeyv(redisUrl),
-                // fallback memory store
-                new Keyv({ store: new CacheableMemory({ ttl: 30 * 60 * 1000, lruSize: 5000 }) }),
               ],
               ttl: 30 * 60, // 秒，不是毫秒
               max: 100,

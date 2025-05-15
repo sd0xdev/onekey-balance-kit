@@ -200,16 +200,8 @@ export class SolanaAlchemyProvider extends AbstractSolanaProviderService {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logError(`Failed to get balances from Alchemy: ${errorMessage}`);
 
-      // 返回帶有失敗標誌的結果
-      return {
-        nativeBalance: {
-          balance: '0',
-        },
-        tokens: [],
-        nfts: [],
-        isSuccess: false,
-        errorMessage: errorMessage,
-      };
+      // 拋出錯誤，讓調用者可以處理
+      throw new Error(`Alchemy provider error: ${errorMessage}`);
     }
   }
 
@@ -262,8 +254,11 @@ export class SolanaAlchemyProvider extends AbstractSolanaProviderService {
 
       return [];
     } catch (error) {
-      this.logError(`Failed to get NFTs: ${error}`);
-      return [];
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logError(`Failed to get NFTs: ${errorMessage}`);
+
+      // 雖然這是內部方法，但對於關鍵操作仍應該拋出錯誤
+      throw new Error(`Failed to fetch NFT data: ${errorMessage}`);
     }
   }
 

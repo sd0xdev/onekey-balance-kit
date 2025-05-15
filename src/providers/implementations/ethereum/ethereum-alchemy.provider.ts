@@ -215,14 +215,8 @@ export class EthereumAlchemyProvider extends AbstractEthereumProviderService {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logError(`Failed to get balances from Alchemy: ${errorMessage}`);
 
-      // 返回空結果作為後備
-      return {
-        nativeBalance: {
-          balance: '0',
-        },
-        tokens: [],
-        nfts: [],
-      };
+      // 拋出錯誤，讓調用者可以處理
+      throw new Error(`Alchemy provider error: ${errorMessage}`);
     }
   }
 

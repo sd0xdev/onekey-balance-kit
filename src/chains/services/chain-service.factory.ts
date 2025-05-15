@@ -3,7 +3,6 @@ import { ModuleRef } from '@nestjs/core';
 import { ChainService, ProviderAware } from '../interfaces/chain-service.interface';
 import { DiscoveryService } from './discovery.service';
 import { COIN_SYMBOL_TO_CHAIN_MAP } from '../constants';
-import { ProviderType } from '../../providers/constants/blockchain-types';
 
 /**
  * ChainServiceFactory 是一個工廠類，用於創建和管理不同區塊鏈的服務實例
@@ -83,21 +82,35 @@ export class ChainServiceFactory {
       return providerSpecificMap.get(providerType)!;
     }
 
-    // 創建新的服務實例並設置特定提供者
-    const service = this.createChainServiceInstance(normalizedChainName);
+    // 創建基礎服務實例，不修改其默認提供者
+    const baseService = this.getChainService(normalizedChainName);
 
-    // 如果服務實現了 ProviderAware 介面，設置預設提供者
-    if (this.isProviderAware(service)) {
-      service.setDefaultProvider(providerType);
+    // 創建一個代理服務，包裝原始服務
+    const proxyService = Object.create(Object.getPrototypeOf(baseService));
+
+    // 複製原始服務的所有屬性到代理服務
+    Object.assign(proxyService, baseService);
+
+    // 如果服務實現了 ProviderAware 介面，覆蓋提供者相關方法
+    if (this.isProviderAware(baseService)) {
+      // 覆蓋 getDefaultProvider 方法，使其始終返回指定的提供者
+      (proxyService as ProviderAware).getDefaultProvider = function () {
+        return providerType;
+      };
+
+      // 覆蓋 setDefaultProvider 方法，防止修改代理服務的提供者
+      (proxyService as ProviderAware).setDefaultProvider = function () {
+        // 不執行任何操作，保持固定的提供者
+      };
     }
 
-    // 存儲特定提供者的服務實例
+    // 存儲特定提供者的服務代理
     if (!providerSpecificMap) {
       this.providerSpecificServices.set(normalizedChainName, new Map<string, ChainService>());
     }
-    this.providerSpecificServices.get(normalizedChainName)!.set(providerType, service);
+    this.providerSpecificServices.get(normalizedChainName)!.set(providerType, proxyService);
 
-    return service;
+    return proxyService;
   }
 
   /**

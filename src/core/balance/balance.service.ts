@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, Optional, Scope } from '@nestjs/common';
 import { CacheService } from '../cache/cache.service';
 import { ChainName, COIN_SYMBOL_TO_CHAIN_MAP } from '../../chains/constants';
 import { ErrorCode } from '../../common/constants/error-codes';
@@ -9,14 +9,17 @@ import {
 import { ChainServiceFactory } from '../../chains/services/chain-service.factory';
 import { isBalanceQueryable } from '../../chains/interfaces/balance-queryable.interface';
 import { ProviderType } from '../../providers/constants/blockchain-types';
+import { REQUEST } from '@nestjs/core';
+import { Request } from 'express';
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class BalanceService {
   private readonly logger = new Logger(BalanceService.name);
 
   constructor(
     private readonly cacheService: CacheService,
     private readonly chainServiceFactory: ChainServiceFactory,
+    @Optional() @Inject(REQUEST) private readonly request: Request,
   ) {}
 
   /**
@@ -44,13 +47,30 @@ export class BalanceService {
     );
   }
 
-  async getPortfolio(chainNameOrSymbol: string, address: string, providerType?: string) {
+  /**
+   * 從請求上下文中獲取區塊鏈提供者
+   *
+   * @returns 標準化的提供者類型
+   */
+  private getProviderFromContext(): ProviderType | undefined {
+    // 從請求上下文中獲取提供者
+    if (this.request && (this.request as any).blockchainProvider) {
+      return this.normalizeProviderType((this.request as any).blockchainProvider);
+    }
+
+    // 如果請求上下文中沒有提供者，返回 undefined，讓服務使用默認提供者
+    return undefined;
+  }
+
+  async getPortfolio(chainNameOrSymbol: string, address: string) {
     const chain = this.normalizeChainInput(chainNameOrSymbol);
 
-    // 1. 先從緩存獲取 (使用標準化的鏈名稱作為鍵的一部分)
-    // 如果指定了 provider，則需要在緩存鍵中包含它
-    const cacheKey = providerType
-      ? `portfolio:${chain}:${address}:${providerType}`
+    // 從請求上下文中獲取提供者
+    const providerFromContext = this.getProviderFromContext();
+
+    // 設置緩存鍵，如果有提供者則包含在鍵中
+    const cacheKey = providerFromContext
+      ? `portfolio:${chain}:${address}:${providerFromContext}`
       : `portfolio:${chain}:${address}`;
 
     const cachedData = await this.cacheService.get(cacheKey);
@@ -61,17 +81,15 @@ export class BalanceService {
       this.logger.debug(`Cache miss for key ${cacheKey}`);
     }
 
-    // 2. 使用鏈服務工廠獲取對應的鏈服務
+    // 使用鏈服務工廠獲取對應的鏈服務
     try {
-      // 解析並驗證 provider 類型
-      const normalizedProviderType = this.normalizeProviderType(providerType);
-
-      // 獲取對應鏈的服務實例 (根據是否指定提供者使用不同方法)
-      const chainService = normalizedProviderType
-        ? this.chainServiceFactory.getChainServiceWithProvider(chain, normalizedProviderType)
+      // 獲取對應鏈的服務實例 (根據是否有上下文提供者使用不同方法)
+      const chainService = providerFromContext
+        ? this.chainServiceFactory.getChainServiceWithProvider(chain, providerFromContext)
         : this.chainServiceFactory.getChainService(chain);
 
       this.logger.debug(`Using chain service: ${chainService.getChainName()}`);
+      this.logger.debug(`Provider: ${providerFromContext || 'default'}`);
 
       if (!chainService.isValidAddress(address)) {
         throw new BlockchainException(
@@ -89,7 +107,6 @@ export class BalanceService {
       }
 
       // 調用鏈服務的 getBalances 方法獲取餘額
-      // 不再需要在這裡傳遞 provider，因為已經在 class level 設置
       const balanceData = await chainService.getBalances(address, false);
 
       if (!balanceData) {
@@ -99,7 +116,7 @@ export class BalanceService {
         );
       }
 
-      // 3. 組裝結果數據 (確保統一的接口)
+      // 組裝結果數據 (確保統一的接口)
       const result = {
         // 使用鏈服務返回的數據
         ...balanceData,

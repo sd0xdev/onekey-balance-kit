@@ -8,6 +8,7 @@ import { BlockchainType, ProviderType } from './constants/blockchain-types';
 import { PROVIDERS_TOKEN } from './constants/provider-registration';
 import { EthereumAlchemyProvider } from './implementations/ethereum/ethereum-alchemy.provider';
 import { SolanaAlchemyProvider } from './implementations/solana/solana-alchemy.provider';
+import { EthereumQuickNodeProvider } from './implementations/ethereum/ethereum-quicknode.provider';
 
 // 創建用於提供者註冊的提供者
 const providersProvider = {
@@ -17,6 +18,11 @@ const providersProvider = {
       blockchainType: BlockchainType.ETHEREUM,
       providerType: ProviderType.ALCHEMY,
       providerClass: EthereumAlchemyProvider,
+    },
+    {
+      blockchainType: BlockchainType.ETHEREUM,
+      providerType: ProviderType.QUICKNODE,
+      providerClass: EthereumQuickNodeProvider,
     },
     {
       blockchainType: BlockchainType.SOLANA,
@@ -35,6 +41,7 @@ const providersProvider = {
     ProviderFactory,
     ProviderDiscoveryService,
     EthereumAlchemyProvider,
+    EthereumQuickNodeProvider,
     SolanaAlchemyProvider,
     // 通過工廠模式和依賴注入管理提供者
   ],

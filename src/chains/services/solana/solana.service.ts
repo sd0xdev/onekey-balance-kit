@@ -54,6 +54,9 @@ export class SolanaService extends AbstractChainService implements BalanceQuerya
     protected readonly configService: ConfigService,
   ) {
     super();
+    // 設置默認提供者，可以從配置中獲取
+    const defaultProvider = this.configService.get<string>('blockchain.defaultProvider', 'alchemy');
+    this.setDefaultProvider(defaultProvider);
   }
 
   getChainName(): string {
@@ -115,15 +118,10 @@ export class SolanaService extends AbstractChainService implements BalanceQuerya
 
       // 獲取提供者類型，按照優先級：
       // 1. Function level (函數參數)
-      // 2. Class level (實例屬性)
-      // 3. System level (系統配置)
-      // 4. Default level (硬編碼預設值)
-      const functionLevelProvider = providerType;
-      const classLevelProvider = this.getDefaultProvider();
-      const systemLevelProvider = this.configService.get<string>('PROVIDER_SOLANA');
-
+      // 2. Class level (this.getDefaultProvider())
+      // 3. Default level (alchemy)
       const selectedProviderType =
-        functionLevelProvider || classLevelProvider || systemLevelProvider || ProviderType.ALCHEMY;
+        providerType || this.getDefaultProvider() || ProviderType.ALCHEMY;
 
       this.logInfo(`Selected provider type: ${selectedProviderType}`);
 
