@@ -1,9 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Connection, PublicKey, LAMPORTS_PER_SOL, clusterApiUrl } from '@solana/web3.js';
+import { Connection, PublicKey, clusterApiUrl } from '@solana/web3.js';
 import { AbstractSolanaProviderService } from '../../abstract/abstract-solana-provider.service';
 import { BalancesResponse, NetworkType } from '../../interfaces/blockchain-provider.interface';
-import { SolanaTransactionRequest } from '../../interfaces/solana-provider.interface';
 import { BlockchainType, ProviderType } from '../../constants/blockchain-types';
 import { Provider } from '../../decorators/provider.decorator';
 import { HttpService } from '@nestjs/axios';

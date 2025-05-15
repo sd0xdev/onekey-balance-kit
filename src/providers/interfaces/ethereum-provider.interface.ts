@@ -1,8 +1,4 @@
-import {
-  BlockchainProviderInterface,
-  NetworkType,
-  BalancesResponse,
-} from './blockchain-provider.interface';
+import { BlockchainProviderInterface, NetworkType } from './blockchain-provider.interface';
 
 /**
  * 以太坊交易資料結構
