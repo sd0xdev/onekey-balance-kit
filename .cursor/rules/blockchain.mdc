@@ -9,43 +9,46 @@ alwaysApply: false
 
 ## 架構概述
 
-系統使用混合架構設計，結合了工廠模式、裝飾器自動註冊和模組化原則：
+系統使用混合架構設計，結合了工廠模式、裝飾器自動註冊和代理模式：
 
 1. **統一介面**：所有鏈服務實現 [ChainService](mdc:src/chains/interfaces/chain-service.interface.ts) 介面
 2. **餘額功能擴展**：支援餘額查詢的鏈服務額外實現 [BalanceQueryable](mdc:src/chains/interfaces/balance-queryable.interface.ts) 介面
-3. **抽象基類**：[AbstractChainService](mdc:src/chains/services/abstract-chain.service.ts) 提供通用實現
-4. **工廠模式**：[ChainServiceFactory](mdc:src/chains/services/chain-service.factory.ts) 管理服務實例
+3. **抽象基類**：[AbstractChainService](mdc:src/chains/services/core/abstract-chain.service.ts) 提供通用實現
+4. **工廠模式**：[ChainServiceFactory](mdc:src/chains/services/core/chain-service.factory.ts) 管理服務實例
 5. **裝飾器註冊**：使用 [@Chain](mdc:src/chains/decorators/chain.decorator.ts) 裝飾器自動發現和註冊服務
-6. **錯誤處理**：使用 [ErrorCode](mdc:src/common/constants/error-codes.ts) 和自定義異常提供統一錯誤處理
+6. **攔截器機制**：使用 [BlockchainProviderInterceptor](mdc:src/chains/interceptors/blockchain-provider.interceptor.ts) 處理提供者選擇
+7. **請求級提供者**：使用 [UseBlockchainProvider](mdc:src/chains/decorators/blockchain-provider.decorator.ts) 裝飾器設定提供者
+8. **錯誤處理**：使用 [ErrorCode](mdc:src/common/constants/error-codes.ts) 和自定義異常提供統一錯誤處理
 
 ## 目錄結構
 
 ```
 src/chains/
-├── interfaces/                    # 介面定義
-│   ├── chain-service.interface.ts # 鏈服務介面
-│   └── balanceable-chain.interface.ts # 餘額服務介面
-├── decorators/                    # 裝飾器定義
-│   └── chain.decorator.ts         # 鏈服務裝飾器
-├── services/                      # 服務實現
-│   ├── abstract-chain.service.ts  # 抽象鏈服務基類
-│   ├── chain-service.factory.ts   # 鏈服務工廠
-│   ├── discovery.service.ts       # 裝飾器發現服務
-│   ├── ethereum/                  # 以太坊服務
+├── interfaces/                     # 介面定義
+│   ├── chain-service.interface.ts  # 鏈服務介面
+│   └── balance-queryable.interface.ts # 餘額服務介面
+├── decorators/                     # 裝飾器定義
+│   ├── chain.decorator.ts          # 鏈服務裝飾器
+│   └── blockchain-provider.decorator.ts # 提供者裝飾器
+├── interceptors/                   # 攔截器
+│   └── blockchain-provider.interceptor.ts # 提供者攔截器
+├── services/                       # 服務實現
+│   ├── core/                       # 核心服務
+│   │   ├── abstract-chain.service.ts # 抽象鏈服務基類
+│   │   ├── chain-service.factory.ts  # 鏈服務工廠
+│   │   ├── discovery.service.ts      # 裝飾器發現服務
+│   │   ├── blockchain.service.ts     # 區塊鏈服務
+│   │   └── request-context.service.ts # 請求上下文服務
+│   ├── ethereum/                   # 以太坊服務
 │   │   └── ethereum.service.ts
-│   └── solana/                    # Solana 服務
+│   └── solana/                     # Solana 服務
 │       └── solana.service.ts
-├── controllers/                   # 控制器
-│   └── chains.controller.ts       # 鏈服務 API 控制器
-├── modules/                       # 模組定義
-│   ├── chains.module.ts           # 主鏈服務模組
-│   ├── ethereum/                  # 以太坊模組
-│   │   └── ethereum.module.ts
-│   └── solana/                    # Solana 模組
-│       └── solana.module.ts
-├── constants/                     # 常量定義
-│   └── index.ts                   # 鏈相關常量
-└── index.ts                       # 入口檔案
+├── controllers/                    # 控制器
+│   └── chains.controller.ts        # 鏈服務 API 控制器
+├── constants/                      # 常量定義
+│   └── index.ts                    # 鏈相關常量
+├── chains.module.ts                # 區塊鏈模組
+└── index.ts                        # 入口檔案
 ```
 
 ## 支援的區塊鏈
@@ -57,41 +60,92 @@ src/chains/
 
 ## 使用方法
 
-1. **注入工廠服務**：
-   ```typescript
-   constructor(private readonly chainServiceFactory: ChainServiceFactory) {}
-   ```
+### 1. 引入模組
 
-2. **獲取特定鏈服務**：
-   ```typescript
-   // 使用鏈名稱
-   const ethService = this.chainServiceFactory.getChainService(ChainName.ETHEREUM);
+```typescript
+import { Module } from '@nestjs/common';
+import { ChainsModule } from './chains/chains.module';
 
-   // 也可使用代幣符號（不區分大小寫）
-   const solService = this.chainServiceFactory.getChainService('sol');
-   ```
+@Module({
+  imports: [ChainsModule],
+})
+export class AppModule {}
+```
 
-3. **使用服務方法**：
-   ```typescript
-   // 基本功能
-   const isValid = ethService.isValidAddress('0x...');
-   const txHashes = await solService.getAddressTransactionHashes('sol_address');
+### 2. 使用區塊鏈服務
 
-   // 餘額查詢功能 (需要先確保服務實現了 BalanceQueryable 介面)
-   if (isBalanceQueryable(ethService)) {
-     const balances = await ethService.getBalances('0x...');
-   }
-   ```
+有兩種方式使用鏈服務：
 
-4. **類型檢查**：
-   ```typescript
-   import { isBalanceQueryable } from '../interfaces/balance-queryable.interface';
+#### a. 直接注入工廠服務：
 
-   // 使用類型守衛函數檢查服務是否支援餘額查詢
-   if (isBalanceQueryable(service)) {
-     // 安全地使用 getBalances 方法
-   }
-   ```
+```typescript
+import { Injectable } from '@nestjs/common';
+import { ChainServiceFactory } from './chains/services/core/chain-service.factory';
+import { ChainName } from './chains/constants';
+
+@Injectable()
+export class YourService {
+  constructor(private readonly chainServiceFactory: ChainServiceFactory) {}
+
+  async someMethod() {
+    // 使用鏈名稱
+    const ethService = this.chainServiceFactory.getChainService(ChainName.ETHEREUM);
+
+    // 也可使用代幣符號（不區分大小寫）
+    const solService = this.chainServiceFactory.getChainService('sol');
+
+    // 使用服務方法
+    const isValid = ethService.isValidAddress('0x...');
+  }
+}
+```
+
+#### b. 使用 BlockchainService（推薦）：
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { BlockchainService } from './chains/services/core/blockchain.service';
+
+@Injectable()
+export class YourService {
+  constructor(private readonly blockchainService: BlockchainService) {}
+
+  async someMethod() {
+    // 獲取特定鏈的服務 - 會自動使用請求上下文中的提供者
+    const ethereumService = this.blockchainService.getService('ethereum');
+
+    // 使用服務方法
+    const isValid = ethereumService.isValidAddress('0x...');
+    const balance = await ethereumService.getBalances('0x...');
+  }
+}
+```
+
+### 3. 指定區塊鏈提供者
+
+使用 `@UseBlockchainProvider()` 裝飾器可以指定區塊鏈提供者：
+
+```typescript
+import { Controller, Get, Param } from '@nestjs/common';
+import { UseBlockchainProvider } from './chains/decorators/blockchain-provider.decorator';
+
+@Controller('balances')
+@UseBlockchainProvider('alchemy') // 控制器級別設置
+export class BalanceController {
+  constructor(private readonly balanceService: BalanceService) {}
+
+  @Get(':chain/:address')
+  @UseBlockchainProvider('quicknode') // 方法級別設置（優先）
+  getBalances(@Param('chain') chain: string, @Param('address') address: string) {
+    return this.balanceService.getPortfolio(chain, address);
+  }
+}
+```
+
+客戶端也可以通過查詢參數指定提供者：
+```
+GET /balances/ethereum/0x742d35Cc6634C0532925a3b844Bc454e4438f44e?provider=quicknode
+```
 
 ## 餘額查詢 API
 
@@ -103,9 +157,10 @@ export interface BalanceQueryable {
    * 獲取特定地址的餘額資訊
    * @param address 區塊鏈地址
    * @param useTestnet 是否使用測試網絡，默認為 false
+   * @param providerType 可選的提供者類型
    * @returns 包含餘額信息的對象
    */
-  getBalances(address: string, useTestnet?: boolean): Promise<BalanceResponse>;
+  getBalances(address: string, useTestnet?: boolean, providerType?: string): Promise<BalanceResponse>;
 }
 ```
 
@@ -146,18 +201,28 @@ if (!chainService.isValidAddress(address)) {
 1. 更新 [constants/index.ts](mdc:src/chains/constants/index.ts) 中的 `ChainName` 枚舉
 2. 創建繼承 `AbstractChainService` 的服務類並使用 `@Chain()` 裝飾器
 3. 可選：實現 `BalanceQueryable` 介面提供餘額查詢功能
-4. 在主模組中導入新的鏈特定模組
+4. 確保新的鏈服務被 NestJS 的依賴注入系統管理（添加到適當的模組中）
 
 ### 添加新的鏈服務示例
 
 ```typescript
 import { Injectable } from '@nestjs/common';
-import { AbstractChainService, Chain, ChainName } from '../chains';
-import { BalanceQueryable, BalanceResponse } from '../interfaces/balance-queryable.interface';
+import { AbstractChainService } from './chains/services/core/abstract-chain.service';
+import { Chain } from './chains/decorators/chain.decorator';
+import { ChainName } from './chains/constants';
+import { BalanceQueryable, BalanceResponse } from './chains/interfaces/balance-queryable.interface';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 @Chain(ChainName.YOUR_CHAIN)
 export class YourChainService extends AbstractChainService implements BalanceQueryable {
+  constructor(protected readonly configService: ConfigService) {
+    super();
+    // 從配置中獲取默認提供者
+    const defaultProvider = this.configService.get<string>('blockchain.defaultProvider', 'alchemy');
+    this.setDefaultProvider(defaultProvider);
+  }
+
   getChainName(): string {
     return ChainName.YOUR_CHAIN;
   }
@@ -181,7 +246,7 @@ export class YourChainService extends AbstractChainService implements BalanceQue
     return { hash, details: 'some details' };
   }
 
-  async getBalances(address: string, useTestnet = false): Promise<BalanceResponse> {
+  async getBalances(address: string, useTestnet = false, providerType?: string): Promise<BalanceResponse> {
     // 實現餘額查詢邏輯
     return {
       nativeBalance: {
