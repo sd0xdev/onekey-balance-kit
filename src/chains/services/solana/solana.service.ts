@@ -8,10 +8,7 @@ import { ChainName } from '../../constants/index';
 import { SolanaCluster, SOL_SYMBOL, SOL_DECIMALS } from './constants';
 import { BlockchainType, ProviderType } from '../../../providers/constants/blockchain-types';
 import { NetworkType } from '../../../providers/interfaces/blockchain-provider.interface';
-import {
-  BalanceableChainService,
-  BalanceResponse,
-} from '../../interfaces/balanceable-chain.interface';
+import { BalanceQueryable, BalanceResponse } from '../../interfaces/balance-queryable.interface';
 
 /**
  * Solana 餘額響應介面
@@ -49,7 +46,7 @@ export interface SolanaBalancesResponse extends BalanceResponse {
 
 @Injectable()
 @Chain(ChainName.SOLANA)
-export class SolanaService extends AbstractChainService implements BalanceableChainService {
+export class SolanaService extends AbstractChainService implements BalanceQueryable {
   protected readonly chainType = 'solana';
 
   constructor(
@@ -99,7 +96,11 @@ export class SolanaService extends AbstractChainService implements BalanceableCh
     };
   }
 
-  async getBalances(address: string, useTestnet = false): Promise<SolanaBalancesResponse> {
+  async getBalances(
+    address: string,
+    useTestnet = false,
+    providerType?: string,
+  ): Promise<SolanaBalancesResponse> {
     try {
       this.logInfo(`Getting Solana balances for ${address}`);
       // 先驗證地址有效性
@@ -112,13 +113,26 @@ export class SolanaService extends AbstractChainService implements BalanceableCh
       const networkType = useTestnet ? NetworkType.TESTNET : NetworkType.MAINNET;
       this.logInfo(`Cluster: ${cluster}`);
 
-      // 獲取配置中設定的提供者類型，如果未設定則使用默認值
-      const configProviderType = this.configService.get<string>('PROVIDER_SOLANA');
-      const providerType = configProviderType || ProviderType.ALCHEMY;
+      // 獲取提供者類型，按照優先級：
+      // 1. Function level (函數參數)
+      // 2. Class level (實例屬性)
+      // 3. System level (系統配置)
+      // 4. Default level (硬編碼預設值)
+      const functionLevelProvider = providerType;
+      const classLevelProvider = this.getDefaultProvider();
+      const systemLevelProvider = this.configService.get<string>('PROVIDER_SOLANA');
+
+      const selectedProviderType =
+        functionLevelProvider || classLevelProvider || systemLevelProvider || ProviderType.ALCHEMY;
+
+      this.logInfo(`Selected provider type: ${selectedProviderType}`);
 
       try {
         // 從提供者工廠獲取 Solana 提供者
-        const provider = this.providerFactory.getProvider(BlockchainType.SOLANA, providerType);
+        const provider = this.providerFactory.getProvider(
+          BlockchainType.SOLANA,
+          selectedProviderType,
+        );
 
         if (provider && provider.isSupported()) {
           this.logInfo(`Using ${provider.getProviderName()} provider for Solana`);
@@ -164,7 +178,7 @@ export class SolanaService extends AbstractChainService implements BalanceableCh
             updatedAt: Math.floor(Date.now() / 1000),
           };
         } else {
-          throw new Error(`Provider ${providerType} is not supported`);
+          throw new Error(`Provider ${selectedProviderType} is not supported`);
         }
       } catch (providerError) {
         this.logWarn(

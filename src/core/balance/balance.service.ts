@@ -7,7 +7,8 @@ import {
   BlockchainException,
 } from '../../common/exceptions/application.exception';
 import { ChainServiceFactory } from '../../chains/services/chain-service.factory';
-import { BalanceableChainService } from '../../chains/interfaces/balanceable-chain.interface';
+import { isBalanceQueryable } from '../../chains/interfaces/balance-queryable.interface';
+import { ProviderType } from '../../providers/constants/blockchain-types';
 
 @Injectable()
 export class BalanceService {
@@ -43,11 +44,15 @@ export class BalanceService {
     );
   }
 
-  async getPortfolio(chainNameOrSymbol: string, address: string) {
+  async getPortfolio(chainNameOrSymbol: string, address: string, providerType?: string) {
     const chain = this.normalizeChainInput(chainNameOrSymbol);
 
-    // 1. 先从缓存获取 (使用標準化的鏈名稱作為鍵的一部分)
-    const cacheKey = `portfolio:${chain}:${address}`;
+    // 1. 先從緩存獲取 (使用標準化的鏈名稱作為鍵的一部分)
+    // 如果指定了 provider，則需要在緩存鍵中包含它
+    const cacheKey = providerType
+      ? `portfolio:${chain}:${address}:${providerType}`
+      : `portfolio:${chain}:${address}`;
+
     const cachedData = await this.cacheService.get(cacheKey);
     if (cachedData) {
       this.logger.debug(`Cache hit for key ${cacheKey}`);
@@ -56,10 +61,16 @@ export class BalanceService {
       this.logger.debug(`Cache miss for key ${cacheKey}`);
     }
 
-    // 2. 使用链服务工厂获取对应的链服务
+    // 2. 使用鏈服務工廠獲取對應的鏈服務
     try {
-      // 获取对应链的服务实例
-      const chainService = this.chainServiceFactory.getChainService(chain);
+      // 解析並驗證 provider 類型
+      const normalizedProviderType = this.normalizeProviderType(providerType);
+
+      // 獲取對應鏈的服務實例 (根據是否指定提供者使用不同方法)
+      const chainService = normalizedProviderType
+        ? this.chainServiceFactory.getChainServiceWithProvider(chain, normalizedProviderType)
+        : this.chainServiceFactory.getChainService(chain);
+
       this.logger.debug(`Using chain service: ${chainService.getChainName()}`);
 
       if (!chainService.isValidAddress(address)) {
@@ -69,8 +80,8 @@ export class BalanceService {
         );
       }
 
-      // 確保鏈服務實現了 BalanceableChainService 介面
-      if (!this.isBalanceableChainService(chainService)) {
+      // 確保鏈服務實現了 BalanceQueryable 介麵
+      if (!isBalanceQueryable(chainService)) {
         throw new BalanceException(
           ErrorCode.BALANCE_CHAIN_NOT_SUPPORTED,
           `Chain ${chain} does not support balance queries`,
@@ -78,7 +89,8 @@ export class BalanceService {
       }
 
       // 調用鏈服務的 getBalances 方法獲取餘額
-      const balanceData = await chainService.getBalances(address);
+      // 不再需要在這裡傳遞 provider，因為已經在 class level 設置
+      const balanceData = await chainService.getBalances(address, false);
 
       if (!balanceData) {
         throw new BalanceException(
@@ -87,15 +99,15 @@ export class BalanceService {
         );
       }
 
-      // 3. 組裝結果數據 (确保统一的接口)
+      // 3. 組裝結果數據 (確保統一的接口)
       const result = {
-        // 使用链服务返回的数据
+        // 使用鏈服務返回的數據
         ...balanceData,
-        // 确保更新时间戳
+        // 確保更新時間戳
         updatedAt: balanceData.updatedAt || Math.floor(Date.now() / 1000),
       };
 
-      // 只有成功獲取數據時才緩存結果
+      // 隻有成功獲取數據時才緩存結果
       await this.cacheService.set(cacheKey, result);
       return result;
     } catch (error) {
@@ -106,11 +118,25 @@ export class BalanceService {
   }
 
   /**
-   * 檢查鏈服務是否實現了 BalanceableChainService 介面
-   * @param service 鏈服務
-   * @returns 是否實現了 BalanceableChainService 介面
+   * 將提供者類型輸入標準化為有效的 ProviderType
+   * @param input 輸入的提供者類型字串
+   * @returns 標準化的 ProviderType 或 undefined (如果輸入無效)
    */
-  private isBalanceableChainService(service: any): service is BalanceableChainService {
-    return 'getBalances' in service && typeof service.getBalances === 'function';
+  private normalizeProviderType(input?: string): ProviderType | undefined {
+    if (!input) return undefined;
+
+    const lowercaseInput = input.toLowerCase();
+
+    // 檢查是否為有效的 ProviderType
+    const isValidProvider = Object.values(ProviderType).some(
+      (value) => value.toLowerCase() === lowercaseInput,
+    );
+
+    if (isValidProvider) {
+      return lowercaseInput as ProviderType;
+    }
+
+    this.logger.warn(`Invalid provider type: ${input}, using default provider`);
+    return undefined;
   }
 }

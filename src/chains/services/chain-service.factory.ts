@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException, Type } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import { ChainService } from '../interfaces/chain-service.interface';
+import { ChainService, ProviderAware } from '../interfaces/chain-service.interface';
 import { DiscoveryService } from './discovery.service';
 import { COIN_SYMBOL_TO_CHAIN_MAP } from '../constants';
+import { ProviderType } from '../../providers/constants/blockchain-types';
 
 /**
  * ChainServiceFactory 是一個工廠類，用於創建和管理不同區塊鏈的服務實例
@@ -11,6 +12,8 @@ import { COIN_SYMBOL_TO_CHAIN_MAP } from '../constants';
 export class ChainServiceFactory {
   private readonly chainServices = new Map<string, ChainService>();
   private readonly chainServiceTypes = new Map<string, Type<ChainService>>();
+  // 用於存儲特定提供者的服務實例
+  private readonly providerSpecificServices = new Map<string, Map<string, ChainService>>();
 
   constructor(
     private readonly moduleRef: ModuleRef,
@@ -66,6 +69,38 @@ export class ChainServiceFactory {
   }
 
   /**
+   * 獲取指定鏈和提供者的服務
+   * @param chainNameOrSymbol 鏈名稱或代幣符號
+   * @param providerType 指定的提供者類型
+   * @returns 鏈服務實例
+   */
+  getChainServiceWithProvider(chainNameOrSymbol: string, providerType: string): ChainService {
+    const normalizedChainName = this.normalizeChainInput(chainNameOrSymbol);
+
+    // 檢查是否已有特定提供者的服務實例
+    const providerSpecificMap = this.providerSpecificServices.get(normalizedChainName);
+    if (providerSpecificMap && providerSpecificMap.has(providerType)) {
+      return providerSpecificMap.get(providerType)!;
+    }
+
+    // 創建新的服務實例並設置特定提供者
+    const service = this.createChainServiceInstance(normalizedChainName);
+
+    // 如果服務實現了 ProviderAware 介面，設置預設提供者
+    if (this.isProviderAware(service)) {
+      service.setDefaultProvider(providerType);
+    }
+
+    // 存儲特定提供者的服務實例
+    if (!providerSpecificMap) {
+      this.providerSpecificServices.set(normalizedChainName, new Map<string, ChainService>());
+    }
+    this.providerSpecificServices.get(normalizedChainName)!.set(providerType, service);
+
+    return service;
+  }
+
+  /**
    * 獲取指定鏈的服務
    * @param chainNameOrSymbol 鏈名稱或代幣符號
    * @returns 鏈服務實例
@@ -81,20 +116,43 @@ export class ChainServiceFactory {
       }
     }
 
-    // 檢查是否已註冊服務類型，若有則創建實例
+    // 創建新的服務實例
+    const service = this.createChainServiceInstance(normalizedChainName);
+    this.chainServices.set(normalizedChainName, service);
+    return service;
+  }
+
+  /**
+   * 創建鏈服務實例
+   * @param normalizedChainName 標準化後的鏈名稱
+   * @returns 鏈服務實例
+   */
+  private createChainServiceInstance(normalizedChainName: string): ChainService {
+    // 檢查是否已註冊服務類型
     if (this.chainServiceTypes.has(normalizedChainName)) {
       const serviceType = this.chainServiceTypes.get(normalizedChainName);
       if (serviceType) {
         const service = this.moduleRef.get(serviceType, { strict: false });
 
         if (service) {
-          this.chainServices.set(normalizedChainName, service);
           return service;
         }
       }
     }
 
-    throw new NotFoundException(`Chain service for ${chainNameOrSymbol} not found`);
+    throw new NotFoundException(`Chain service for ${normalizedChainName} not found`);
+  }
+
+  /**
+   * 檢查服務是否實現了 ProviderAware 介面
+   * @param service 鏈服務
+   * @returns 是否實現了 ProviderAware 介面
+   */
+  private isProviderAware(service: any): service is ProviderAware {
+    return (
+      typeof service.setDefaultProvider === 'function' &&
+      typeof service.getDefaultProvider === 'function'
+    );
   }
 
   /**

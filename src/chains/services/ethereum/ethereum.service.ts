@@ -8,10 +8,7 @@ import { EthereumChainId, ETH_SYMBOL, ETH_DECIMALS } from './constants';
 import { ProviderFactory } from '../../../providers/provider.factory';
 import { ProviderType } from '../../../providers/constants/blockchain-types';
 import { NetworkType } from '../../../providers/interfaces/blockchain-provider.interface';
-import {
-  BalanceableChainService,
-  BalanceResponse,
-} from '../../interfaces/balanceable-chain.interface';
+import { BalanceQueryable, BalanceResponse } from '../../interfaces/balance-queryable.interface';
 
 // 定義 Fungible 類型 (用於最終輸出)
 interface Fungible {
@@ -47,7 +44,7 @@ export interface EthereumBalancesResponse extends BalanceResponse {
 
 @Injectable()
 @Chain(ChainName.ETHEREUM)
-export class EthereumService extends AbstractChainService implements BalanceableChainService {
+export class EthereumService extends AbstractChainService implements BalanceQueryable {
   constructor(
     protected readonly configService: ConfigService,
     private readonly providerFactory: ProviderFactory,
@@ -115,7 +112,11 @@ export class EthereumService extends AbstractChainService implements Balanceable
     }
   }
 
-  async getBalances(address: string, useTestnet = false): Promise<EthereumBalancesResponse> {
+  async getBalances(
+    address: string,
+    useTestnet = false,
+    providerType?: string,
+  ): Promise<EthereumBalancesResponse> {
     try {
       this.logInfo(`Getting Ethereum balances for ${address}`);
       // 先驗證地址有效性
@@ -126,13 +127,23 @@ export class EthereumService extends AbstractChainService implements Balanceable
       const networkType = useTestnet ? NetworkType.TESTNET : NetworkType.MAINNET;
       this.logInfo(`Network: ${networkType}`);
 
-      // 獲取配置中設定的提供者類型，如果未設定則使用默認值
-      const configProviderType = this.configService.get<string>('PROVIDER_ETHEREUM');
-      const providerType = configProviderType || ProviderType.ALCHEMY;
+      // 獲取提供者類型，按照優先級：
+      // 1. Function level (函數參數)
+      // 2. Class level (實例屬性)
+      // 3. System level (系統配置)
+      // 4. Default level (硬編碼預設值)
+      const functionLevelProvider = providerType;
+      const classLevelProvider = this.getDefaultProvider();
+      const systemLevelProvider = this.configService.get<string>('PROVIDER_ETHEREUM');
+
+      const selectedProviderType =
+        functionLevelProvider || classLevelProvider || systemLevelProvider || ProviderType.ALCHEMY;
+
+      this.logInfo(`Selected provider type: ${selectedProviderType}`);
 
       try {
         // 從提供者工廠獲取以太坊提供者
-        const provider = this.providerFactory.getEthereumProvider(providerType);
+        const provider = this.providerFactory.getEthereumProvider(selectedProviderType);
 
         if (provider && provider.isSupported()) {
           this.logInfo(`Using ${provider.getProviderName()} provider for Ethereum`);
@@ -166,7 +177,7 @@ export class EthereumService extends AbstractChainService implements Balanceable
             updatedAt: Math.floor(Date.now() / 1000),
           };
         } else {
-          throw new Error(`Provider ${providerType} is not supported`);
+          throw new Error(`Provider ${selectedProviderType} is not supported`);
         }
       } catch (providerError) {
         this.logWarn(

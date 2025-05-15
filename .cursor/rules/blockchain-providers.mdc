@@ -5,16 +5,29 @@ alwaysApply: false
 ---
 # 區塊鏈提供者指南
 
-本文檔說明了如何在系統中添加和配置新的區塊鏈提供者。
+本文檔說明了系統中的區塊鏈提供者架構及如何使用和配置新的區塊鏈提供者。
 
 ## 架構概述
 
-本系統使用工廠模式和服務發現機制來管理不同的區塊鏈提供者。主要組件包括：
+系統採用多層架構設計，將區塊鏈服務與區塊鏈提供者分離：
 
-1. [`BlockchainProviderInterface`](mdc:src/providers/interfaces/blockchain-provider.interface.ts) - 所有提供者必須實現的基礎接口
-2. [`ProviderFactory`](mdc:src/providers/provider.factory.ts) - 管理和提供區塊鏈提供者的工廠類
-3. [`ProviderDiscoveryService`](mdc:src/providers/provider-discovery.service.ts) - 服務發現機制，用於自動發現和註冊提供者
-4. [`ProvidersModule`](mdc:src/providers/providers.module.ts) - 負責註冊所有相關服務的模組
+1. **服務層**：[ChainService](mdc:src/chains/interfaces/chain-service.interface.ts) 和 [BalanceQueryable](mdc:src/chains/interfaces/balance-queryable.interface.ts) 提供統一的業務介面
+2. **工廠層**：[ChainServiceFactory](mdc:src/chains/services/chain-service.factory.ts) 負責管理鏈服務，[ProviderFactory](mdc:src/providers/provider.factory.ts) 負責管理提供者
+3. **提供者層**：各區塊鏈的具體提供者實現 [BlockchainProviderInterface](mdc:src/providers/interfaces/blockchain-provider.interface.ts)
+4. **服務發現**：使用 [ProviderDiscoveryService](mdc:src/providers/provider-discovery.service.ts) 自動發現和註冊提供者
+
+## 區塊鏈服務與提供者關係
+
+系統通過工廠模式和依賴注入實現了區塊鏈服務與提供者的解耦：
+
+```
+BalanceService ──────► ChainServiceFactory ──────► ChainService (實現 BalanceQueryable)
+                                                     │
+                                                     ▼
+                                                ProviderFactory ──────► BlockchainProviderInterface
+```
+
+此設計遵循依賴反轉原則，使服務和提供者可以獨立開發和測試。
 
 ## 提供者服務發現
 
@@ -35,11 +48,40 @@ export class EthereumAlchemyProvider extends AbstractEthereumProviderService {
 }
 ```
 
+## 提供者介面
+
+所有區塊鏈提供者必須實現 `BlockchainProviderInterface`，為特定區塊鏈提供專用介面：
+
+- [EthereumProviderInterface](mdc:src/providers/interfaces/ethereum-provider.interface.ts) - 以太坊提供者介面
+- [SolanaProviderInterface](mdc:src/providers/interfaces/solana-provider.interface.ts) - Solana 提供者介面
+
+核心方法包括：
+
+```typescript
+export interface BlockchainProviderInterface {
+  getProviderName(): string;
+  isSupported(): boolean;
+  getBalances(address: string, networkType?: NetworkType): Promise<BalancesResponse>;
+  getBaseUrl(networkType?: NetworkType): string;
+  getApiKey(networkType?: NetworkType): string;
+}
+```
+
+## 餘額查詢流程
+
+當用戶請求獲取區塊鏈地址餘額時，系統遵循以下流程：
+
+1. `BalanceService.getPortfolio()` 方法接收鏈名稱和地址
+2. 使用 `ChainServiceFactory` 獲取對應的鏈服務
+3. 驗證鏈服務是否實現了 `BalanceQueryable` 介面
+4. 調用 `getBalances()` 方法，該方法內部使用 `ProviderFactory` 獲取適當的提供者
+5. 提供者執行實際的區塊鏈查詢並返回統一格式的結果
+
 ## 添加新的區塊鏈提供者
 
 要添加新的區塊鏈提供者，請遵循以下步驟：
 
-1. **創建接口實現**：實現對應區塊鏈的接口（如 `EthereumProviderInterface` 或 `SolanaProviderInterface`）
+1. **創建介面實現**：實現對應區塊鏈的提供者介面
 
 2. **使用 @Provider 裝飾器標記**：
    ```typescript
@@ -85,38 +127,112 @@ const alchemyProvider = this.providerFactory.getProvider(
 2. **Solana提供者**：
    - [`SolanaAlchemyProvider`](mdc:src/providers/implementations/solana/solana-alchemy.provider.ts) - 使用 Alchemy API 的 Solana 提供者
 
-## 依賴和模組配置
+## 錯誤處理
 
-確保在使用 HTTP 請求的提供者（如 `SolanaAlchemyProvider`）時，在 `ProvidersModule` 中導入 `HttpModule`：
+區塊鏈提供者遵循統一的錯誤處理機制：
+
+- 使用 [ErrorCode](mdc:src/common/constants/error-codes.ts) 枚舉定義錯誤類型
+- 抛出特定的異常類，如 `ProviderException`
+- 在響應中提供詳細的錯誤信息
+
+示例：
 
 ```typescript
-@Module({
-  imports: [DiscoveryModule, ConfigModule, HttpModule],
-  providers: [
-    // ... 其他提供者
-    ProviderDiscoveryService,
-    ProviderFactory,
-  ],
-  exports: [ProviderFactory],
-})
-export class ProvidersModule {}
+if (!this.apiKey) {
+  throw new ProviderException(
+    ErrorCode.PROVIDER_AUTH_FAILED,
+    `API key not provided for ${this.getProviderName()}`
+  );
+}
 ```
 
 ## 提供者實現檢查清單
 
 確保您的提供者實現了以下方法：
 
+- `getProviderName()`: 獲取提供者名稱
 - `getBaseUrl(networkType?)`: 獲取 API 基本 URL
 - `getChainConfig()`: 獲取鏈配置
 - `getApiKey(networkType?)`: 獲取 API 密鑰
 - `getBalances(address, networkType?)`: 獲取餘額
 - `isSupported()`: 檢查提供者是否被支持
 
+## 測試網絡支援
+
+系統支援主網和測試網切換，通過 `NetworkType` 枚舉：
+
+```typescript
+export enum NetworkType {
+  MAINNET = 'mainnet',
+  TESTNET = 'testnet',
+}
+```
+
+提供者需要根據 `networkType` 參數返回相應網絡的數據。
+
+## 擴展指南
+
+### 1. 添加新的區塊鏈類型
+
+在 [blockchain-types.ts](mdc:src/providers/constants/blockchain-types.ts) 中添加新類型：
+
+```typescript
+export enum BlockchainType {
+  ETHEREUM = 'ethereum',
+  SOLANA = 'solana',
+  YOUR_BLOCKCHAIN = 'your_blockchain',
+}
+```
+
+### 2. 添加新的提供者類型
+
+在 [blockchain-types.ts](mdc:src/providers/constants/blockchain-types.ts) 中添加新的提供者類型：
+
+```typescript
+export enum ProviderType {
+  ALCHEMY = 'alchemy',
+  INFURA = 'infura',
+  YOUR_PROVIDER = 'your_provider',
+}
+```
+
+### 3. 實現新的提供者類
+
+創建繼承自抽象基類的提供者實現：
+
+```typescript
+@Provider({
+  blockchainType: BlockchainType.YOUR_BLOCKCHAIN,
+  providerType: ProviderType.YOUR_PROVIDER,
+})
+@Injectable()
+export class YourBlockchainProvider extends AbstractProviderService {
+  // 實現特定方法...
+}
+```
+
+### 4. 在對應的鏈服務中使用提供者
+
+更新或創建新的鏈服務，實現 `BalanceQueryable` 介面：
+
+```typescript
+@Injectable()
+@Chain(ChainName.YOUR_CHAIN)
+export class YourChainService extends AbstractChainService implements BalanceQueryable {
+  constructor(private readonly providerFactory: ProviderFactory) {
+    super();
+  }
+
+  // ... existing code ...
+}
+```
+
 ## 故障排除
 
 - 如果提供者未被正確註冊，檢查 imports 和 exports
 - 如果 API 調用失敗，檢查 API 密鑰和 URL
 - 如果返回的數據格式不正確，檢查轉換邏輯
+- 使用日誌記錄診斷問題，例如 `this.logger.debug()`
 
 # 區塊鏈提供者 (Blockchain Provider)
 

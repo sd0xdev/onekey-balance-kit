@@ -14,6 +14,24 @@ export type PrivateKey = string;
 export type TransactionResult = string;
 
 /**
+ * 提供者感知介面
+ * 實現此介面的服務可以設置和獲取預設提供者
+ */
+export interface ProviderAware {
+  /**
+   * 設置預設提供者
+   * @param providerType 提供者類型
+   */
+  setDefaultProvider(providerType: string): void;
+
+  /**
+   * 獲取預設提供者
+   * @returns 預設提供者類型
+   */
+  getDefaultProvider(): string | undefined;
+}
+
+/**
  * 區塊鏈服務介面
  * 所有鏈服務類都應實現此介面
  */
