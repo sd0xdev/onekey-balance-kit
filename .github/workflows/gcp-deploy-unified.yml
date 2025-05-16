@@ -26,6 +26,10 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: ${{ vars.GCP_REGION || 'asia-east1' }}
 
+# 明確設置預設權限
+permissions:
+  contents: read
+
 jobs:
   # =============================================================
   # 1) Build & Push Docker Image
@@ -204,6 +208,8 @@ jobs:
     name: 📝 Generate Manifest
     runs-on: ubuntu-latest
     needs: build_push
+    permissions:
+      contents: read
     outputs:
       manifest: cloud-run-service.generated.yaml
     steps:

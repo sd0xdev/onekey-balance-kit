@@ -7,6 +7,10 @@ on:
     branches: [main, develop]
     types: [opened, synchronize, reopened]
 
+# 添加明確的權限設定
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
