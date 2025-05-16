@@ -107,6 +107,13 @@ describe('CacheService', () => {
     }).compile();
 
     service = module.get<CacheService>(CacheService);
+
+    // 模擬 service 直接獲取 redisClient，以確保測試 isRedisConnected 成功
+    Object.defineProperty(service, 'redisClient', {
+      value: mockRedisClient,
+      writable: true,
+    });
+
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
@@ -239,6 +246,10 @@ describe('CacheService', () => {
     });
 
     it('isRedisConnected 方法應該正確檢測 Redis 連接狀態', async () => {
+      // 確保 mockRedisClient 有所需的屬性和方法
+      mockRedisClient.isOpen = true;
+      mockRedisClient.ping.mockResolvedValue('PONG');
+
       const result = await service.isRedisConnected();
       expect(result).toBe(true);
 
