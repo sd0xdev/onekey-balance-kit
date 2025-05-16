@@ -1,0 +1,31 @@
+name: Auto Create Pull Request
+on:
+  push:
+    branches:
+      - develop
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Check if PR exists
+        id: check_pr
+        run: |
+          pr_exists=$(curl -s -H "Authorization: Bearer ${{ github.token }}" https://api.github.com/repos/$GITHUB_REPOSITORY/pulls\?head\=develop\&base\=main | jq '.[] | select(.state == "open" and .head.ref == "develop").number')
+          if [[ -z $pr_exists ]] ; then
+            echo "pr_exists=false" >> $GITHUB_OUTPUT
+          else
+            echo "pr_exists=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create pull request
+        if: steps.check_pr.outputs.pr_exists == 'false'
+        run: gh pr create -B main -H develop --title "Release Production Merge develop into main" --body "Created by GitHub Action"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

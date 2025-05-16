@@ -1,6 +1,6 @@
 ---
-description:
-globs:
+description: 快取策略
+globs: 
 alwaysApply: false
 ---
 # 多層快取策略
@@ -40,3 +40,124 @@ OneKeyBalanceKit 實現了三層快取策略，用於優化區塊鏈資產餘額
 - 快取錯誤不會導致應用程序失敗
 - 快取服務捕獲並記錄所有可能的錯誤
 - 提供優雅的降級機制
+
+# 快取策略
+
+本項目實現了靈活的快取策略，支援記憶體快取和 Redis 快取。
+
+## 快取服務概述
+
+[CacheService](mdc:src/core/cache/cache.service.ts) 提供了一個通用的快取介面，能夠根據配置自動切換快取存儲方式。
+
+核心特性：
+- 自動偵測並使用 Redis（若可用）或降級為記憶體快取
+- 支援 TTL（存活時間）設定
+- 提供模式化的快取刪除功能（僅適用於 Redis）
+- 全面的錯誤處理與日誌記錄
+
+## 使用方法
+
+1. **注入快取服務**：
+   ```typescript
+   constructor(private readonly cacheService: CacheService) {}
+   ```
+
+2. **快取操作**：
+   ```typescript
+   // 存儲資料（帶 TTL）
+   await this.cacheService.set('your-key', data, 3600); // TTL 為 3600 秒
+   
+   // 讀取資料
+   const data = await this.cacheService.get<YourType>('your-key');
+   
+   // 刪除快取
+   await this.cacheService.delete('your-key');
+   
+   // 批次刪除（Redis 模式）
+   await this.cacheService.deleteByPattern('prefix:*');
+   ```
+
+3. **檢查快取類型**：
+   ```typescript
+   const cacheType = this.cacheService.getCacheType(); // 'Redis' 或 'Memory'
+   ```
+
+## 最佳實踐
+
+1. **使用有意義的鍵名前綴**：
+   ```typescript
+   const key = `user:${userId}:profile`;
+   ```
+
+2. **根據資料特性設定適當的 TTL**：
+   - 頻繁變動的資料：短 TTL（幾秒到幾分鐘）
+   - 半靜態資料：中等 TTL（幾小時到一天）
+   - 靜態參考資料：長 TTL（幾天到幾週）
+
+3. **在關鍵更新後主動刪除快取**：
+   ```typescript
+   await updateUserProfile(userId, newData);
+   await this.cacheService.delete(`user:${userId}:profile`);
+   ```
+
+4. **使用模式刪除進行關聯清理**：
+   ```typescript
+   // 清除用戶的所有相關快取
+   await this.cacheService.deleteByPattern(`user:${userId}:*`);
+   ```
+
+5. **錯誤處理的優雅降級**：
+   ```typescript
+   try {
+     const cachedData = await this.cacheService.get<Data>('key');
+     if (cachedData) return cachedData;
+     
+     // 快取未命中，從源頭獲取資料
+     const freshData = await this.dataService.getFreshData();
+     await this.cacheService.set('key', freshData, 3600);
+     return freshData;
+   } catch (err) {
+     // 快取服務出錯時，直接從資料源獲取
+     return this.dataService.getFreshData();
+   }
+   ```
+
+## 快取過期策略
+
+不同類型的數據適用不同的快取過期時間：
+
+| 數據類型 | 建議過期時間 | 說明 |
+|---------|------------|------|
+| 餘額數據 | 1-5 分鐘   | 餘額可能頻繁變化 |
+| 交易歷史 | 30 分鐘    | 歷史交易不會變更，但新交易會產生 |
+| 代幣價格 | 1-10 分鐘  | 根據市場波動性調整 |
+| NFT 元數據 | 1 小時    | 元數據較少變更 |
+
+## 快取失效
+
+在以下情況應主動使快取失效：
+
+1. 用戶執行了可能改變數據的操作（如轉賬）
+2. 前端用戶手動刷新請求
+3. 後台監測到數據變化
+
+```typescript
+// 使快取失效示例
+async function transferTokens(fromAddress: string, toAddress: string, amount: string): Promise<TransactionResult> {
+  // 執行轉賬操作
+  const result = await this.blockchainProvider.transfer(fromAddress, toAddress, amount);
+  
+  // 主動使相關快取失效
+  await this.cacheManager.del(`balance:${fromAddress}`);
+  await this.cacheManager.del(`balance:${toAddress}`);
+  
+  return result;
+}
+```
+
+## 快取優化技巧
+
+1. **分層快取**：熱門數據使用更快的記憶體快取
+2. **背景刷新**：在快取即將過期前異步刷新
+3. **條件快取**：對不同用戶、不同場景使用不同快取策略
+4. **快取壓縮**：大量數據使用壓縮算法節省記憶體

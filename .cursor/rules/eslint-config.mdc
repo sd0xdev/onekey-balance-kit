@@ -1,39 +1,107 @@
 ---
-description: 
+description: ESLint 配置指南
 globs: 
 alwaysApply: false
 ---
 # ESLint 配置指南
 
-本專案使用 ESLint v9 的扁平化配置格式，配置文件為 [eslint.config.mjs](mdc:eslint.config.mjs)。
+本專案使用 ESLint 進行程式碼檢查，確保程式碼風格一致性和避免常見錯誤。
 
-## 主要特點
+## 基本配置
 
-- 使用 TypeScript ESLint 進行 TypeScript 代碼的靜態分析
-- 與 Prettier 集成以處理代碼格式化
-- 針對 NestJS 應用程式的最佳實踐設定
+專案使用了以下 ESLint 擴展：
 
-## 配置結構
+- `eslint:recommended`：ESLint 推薦的基本規則
+- `plugin:@typescript-eslint/recommended`：TypeScript 推薦規則
+- `plugin:prettier/recommended`：Prettier 格式化整合
+- `plugin:sonarjs/recommended`：SonarJS 質量檢查規則
+- `plugin:jest/recommended`：Jest 測試框架規則
 
-配置文件使用扁平化數組，包含以下部分：
-- 忽略設定：忽略特定文件和目錄（dist、node_modules）
-- 基本推薦配置：繼承 ESLint 和 TypeScript ESLint 的推薦配置
-- 語言選項：設定 ECMAScript 版本、源碼類型和解析器選項
-- 自定義規則：根據專案需求定制的 ESLint 規則
+## 編碼風格規則
 
-## 關鍵規則設定
+以下是一些關鍵風格規則和最佳實踐：
 
-### 嚴格規則（設為 error）
-- `no-floating-promises`: 防止未處理的 Promise，避免非同步錯誤
-- `await-thenable`: 確保只對 Promise 物件使用 await
-- `no-misused-promises`: 避免在條件表達式等錯誤位置使用 Promise
+1. **命名約定**
+   - 類名：PascalCase（如 `ChainService`）
+   - 變量和函數：camelCase（如 `getChainService`）
+   - 常量：UPPER_SNAKE_CASE（如 `CHAIN_METADATA`）
+   - 枚舉：PascalCase（如 `ChainName`）
+   - 介面：PascalCase，不使用前綴 I（如 `ChainService` 而非 `IChainService`）
 
-### 警告規則（設為 warn）
-- `no-explicit-any`: 警告使用 `any` 類型，鼓勵更嚴格的類型定義
-- `no-unsafe-assignment`/`call`/`member-access`/`return`: 提示不安全的類型操作
-- `restrict-template-expressions`: 警告模板字符串中的不安全類型
+2. **引入順序**
+   - 按以下順序排列：外部依賴 → 專案內部模組 → 相對路徑依賴
+   - 每個分組之間添加空行
 
-### 關閉的規則
-- `interface-name-prefix`: 不要求介面名稱前綴
-- `explicit-function-return-type`: 允許類型推斷返回值
-- `explicit-module-boundary-types`: 不要求模組邊界顯式類型
+```typescript
+// 外部依賴
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
+// 專案內部模組
+import { ChainName } from '../../constants';
+
+// 相對路徑依賴
+import { EthereumService } from './ethereum.service';
+```
+
+3. **註解規範**
+   - 使用 JSDoc 風格的註解
+   - 類、方法和複雜邏輯必須加註解
+   - 每個公共 API 需要註解其預期行為
+
+```typescript
+/**
+ * 驗證地址是否有效
+ * @param address 要驗證的區塊鏈地址
+ * @returns 地址是否有效
+ */
+isValidAddress(address: string): boolean {
+  // 實現邏輯
+}
+```
+
+## 程式碼質量規則
+
+1. **複雜度控制**
+   - 圈複雜度限制：15
+   - 函數參數數量限制：4
+   - 禁止巢狀回調超過 3 層
+
+2. **空值與未定義處理**
+   - 優先使用可選鏈操作符 `?.` 和空值合併運算符 `??`
+   - 避免 `== null` 的寬鬆比較，使用 `=== null` 或 `=== undefined`
+
+3. **副作用控制**
+   - 避免在條件表達式中有賦值操作
+   - 避免修改函數參數
+   - 使用 `const` 而非 `let`（除非變量需要重新賦值）
+
+## 禁止的模式
+
+以下模式在程式碼審查中會被拒絕：
+
+1. **類型安全**
+   - 禁止使用 `any` 類型（除非有明確理由並添加註解）
+   - 禁止使用 `@ts-ignore` 和 `@ts-nocheck`
+
+2. **代碼可維護性**
+   - 禁止有空的代碼塊
+   - 禁止未使用的變量和導入
+   - 禁止重複的代碼塊
+   - 禁止過長的函數（超過 50 行）
+
+3. **潛在錯誤**
+   - 禁止 `console.log`（使用 Logger 服務代替）
+   - 禁止無條件的 Promise 拒絕
+
+## 應用 ESLint
+
+在開發過程中，使用以下方式運行 ESLint 檢查：
+
+```bash
+# 檢查所有文件
+npm run lint
+
+# 自動修復問題
+npm run lint:fix
+```

@@ -1,42 +1,188 @@
 ---
-description:
-globs:
+description: Nest.js 最佳實踐
+globs: 
 alwaysApply: false
 ---
-# NestJS 模式與最佳實踐
+# Nest.js 最佳實踐
 
-本專案遵循 NestJS 框架的最佳實踐，特別是以下幾點：
+本專案基於 Nest.js 框架開發，遵循以下最佳實踐。
 
-## 模組化設計
+## 模組組織
 
-- 每個功能區域組織為獨立模組（Module）
-- 核心功能封裝在 [src/core](mdc:src/core) 目錄下
-- 區塊鏈特定代碼在 [src/chains](mdc:src/chains) 目錄下
+1. **功能模組化**
+   - 按功能領域組織模組，如 `ChainsModule`、`BalancesModule`
+   - 每個模組應該自包含並通過明確的 API 與其他模組交互
 
-## 生命週期管理
+2. **共享模組**
+   - 將共用功能（如快取、資料庫）放入 `CoreModule`
+   - 共享模組應通過 `exports` 暴露其服務
 
-- 使用 `OnModuleInit` 和 `OnModuleDestroy` 接口管理資源
-- 例如 [DbService](mdc:src/core/db/db.service.ts) 使用生命週期鉤子初始化和關閉數據庫連接
+```typescript
+@Module({
+  providers: [CacheService],
+  exports: [CacheService], // 確保其他模組可以使用
+})
+export class CoreModule {}
+```
 
 ## 依賴注入
 
-- 使用構造函數注入依賴
-- 所有服務使用 `@Injectable()` 裝飾器標記
-- 使用 `private readonly` 聲明注入的依賴
+1. **構造函數注入**
+   - 使用構造函數注入依賴，而非屬性注入
+   - 標記為 `private readonly` 以確保不可變性
 
-## 錯誤處理模式
+```typescript
+@Injectable()
+export class YourService {
+  constructor(
+    private readonly cacheService: CacheService,
+    private readonly configService: AppConfigService,
+  ) {}
+}
+```
 
-- 使用 try/catch 包裹可能出錯的操作
-- 詳細記錄錯誤信息，包括錯誤消息和堆棧
-- 對於非致命錯誤（如緩存錯誤）不中斷流程
+2. **使用介面與令牌**
+   - 為抽象依賴定義介面
+   - 使用自定義令牌注入具體實現
+
+```typescript
+export const CACHE_PROVIDER = 'CACHE_PROVIDER';
+
+@Module({
+  providers: [
+    {
+      provide: CACHE_PROVIDER,
+      useClass: RedisCacheService,
+    },
+  ],
+})
+```
+
+## 服務設計
+
+1. **單一職責原則**
+   - 每個服務應該有一個明確的職責
+   - 避免"上帝對象"，將大型服務拆分為小型聚焦服務
+
+2. **工廠模式與裝飾器自動發現**
+   - 使用工廠模式創建複雜對象
+   - 結合裝飾器和反射元數據自動發現服務
+
+```typescript
+@Injectable()
+export class ChainServiceFactory {
+  private readonly services = new Map<string, ChainService>();
+  
+  getChainService(chainName: string): ChainService {
+    // 實現服務查找或創建邏輯
+  }
+}
+```
+
+## 錯誤處理
+
+1. **異常過濾器**
+   - 使用全局異常過濾器統一處理錯誤
+   - 確保一致的錯誤響應格式
+
+```typescript
+@Catch()
+export class GlobalExceptionFilter implements ExceptionFilter {
+  catch(exception: any, host: ArgumentsHost) {
+    // 處理並格式化錯誤響應
+  }
+}
+```
+
+2. **業務邏輯中的錯誤處理**
+   - 使用 try/catch 捕獲預期的錯誤
+   - 對非預期異常進行適當的日誌記錄
+
+```typescript
+try {
+  await this.someOperation();
+} catch (err) {
+  this.logger.error(`操作失敗: ${err.message}`, err.stack);
+  throw new InternalServerErrorException('操作處理失敗');
+}
+```
 
 ## 配置管理
 
-- 使用 `ConfigService` 進行配置管理
-- 使用環境變量控制應用行為
+1. **集中式配置**
+   - 使用 `ConfigModule` 集中管理應用程式配置
+   - 支援不同環境的配置
 
-## 非同步處理
+2. **強類型配置**
+   - 使用類和介面定義配置結構
+   - 提供默認值和驗證
 
-- 正確使用 Promise 和 async/await
-- 使用 `Promise.all` 進行並行操作
-- 避免浮動 Promise（確保所有 Promise 都被處理）
+```typescript
+@Injectable()
+export class AppConfigService {
+  constructor(private configService: ConfigService) {}
+  
+  get redis(): RedisConfig | null {
+    const config = this.configService.get<RedisConfig>('redis');
+    return config || null;
+  }
+}
+```
+
+## 日誌記錄
+
+1. **使用 Logger 服務**
+   - 避免直接使用 `console.log`
+   - 每個類使用自己的命名日誌記錄器
+
+```typescript
+private readonly logger = new Logger(YourService.name);
+
+this.logger.log('這是一條信息');
+this.logger.error('發生錯誤', stack);
+```
+
+2. **結構化日誌**
+   - 使用結構化格式記錄詳細上下文
+   - 包含相關標識符以便跟踪
+
+```typescript
+this.logger.log(
+  `處理交易 [${txId}], 用戶 [${userId}]`,
+);
+```
+
+## 測試最佳實踐
+
+- 單元測試應該模擬外部依賴
+- 集成測試應該使用測試數據庫/環境
+- 使用 Jest 的模擬功能隔離服務
+
+```typescript
+describe('EthereumService', () => {
+  let service: EthereumService;
+  let mockProviderFactory: MockType<BlockchainProviderFactory>;
+  
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        EthereumService,
+        {
+          provide: BlockchainProviderFactory,
+          useFactory: () => ({
+            getProvider: jest.fn(),
+          }),
+        },
+      ],
+    }).compile();
+    
+    service = module.get<EthereumService>(EthereumService);
+    mockProviderFactory = module.get(BlockchainProviderFactory);
+  });
+  
+  it('should validate Ethereum address correctly', () => {
+    expect(service.isValidAddress('0x742d35Cc6634C0532925a3b844Bc454e4438f44e')).toBeTruthy();
+    expect(service.isValidAddress('invalid')).toBeFalsy();
+  });
+});
+```

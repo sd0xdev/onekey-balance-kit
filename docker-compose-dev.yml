@@ -1,0 +1,40 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: one-key-balance-kit-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mongodb:
+    image: mongo:8.0
+    container_name: one-key-balance-kit-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: onekey
+      MONGO_INITDB_ROOT_PASSWORD: onekey123
+      MONGO_INITDB_DATABASE: onekey
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh mongodb://onekey:onekey123@localhost:27017/admin --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  redis_data:
+    driver: local
+  mongodb_data:
+    driver: local

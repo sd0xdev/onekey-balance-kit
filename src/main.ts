@@ -1,6 +1,16 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+
+/**
+ * 如果環境變量沒有設置，則設置默認的NODE_ENV
+ * 這在開發環境很有用，生產環境應該由部署流程設置
+ */
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = 'development';
+  console.log(`環境變量NODE_ENV未設置，默認使用'development'環境`);
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -17,10 +27,14 @@ async function bootstrap() {
     }),
   );
 
+  // 註冊全局HTTP異常過濾器
+  app.useGlobalFilters(new HttpExceptionFilter());
+
   app.enableCors(); // 允許跨域請求
   app.setGlobalPrefix('v1'); // API版本前綴
-  await app.listen(3000);
-  console.log(`OneKeyBalanceKit 正在運行，訪問: http://localhost:3000/v1/`);
+  const port = parseInt(process.env.PORT || '3000', 10);
+  await app.listen(port);
+  console.log(`OneKeyBalanceKit 正在運行，訪問: http://localhost:${port}/v1/`);
 }
 
 // 處理未捕獲的Promise錯誤，防止進程崩潰

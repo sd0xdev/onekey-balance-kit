@@ -1,33 +1,125 @@
 ---
-description: 
-globs: 
+description: 專案結構
+globs:
 alwaysApply: false
 ---
 # OneKeyBalanceKit 專案結構
 
-本專案是一個 NestJS 應用程式，支援以太坊和 Solana 區塊鏈的資產餘額查詢。專案結構組織為模組化的設計。
+本專案是一個 NestJS 應用程式，支援以太坊和 Solana 區塊鏈的資產餘額查詢。專案採用模組化設計，目錄結構清晰、職責分離。
 
 ## 主要入口點
-- [src/main.ts](mdc:src/main.ts) - 應用程式的啟動點，設定全局 ValidationPipe 和 CORS
-- [src/app.module.ts](mdc:src/app.module.ts) - 根模組，導入所有其他模組
+- `src/main.ts` - 應用程式啟動點，設定全局 ValidationPipe、CORS 與中介層
+- `src/app.module.ts` - 根模組，整合各子模組並載入全局配置
 
-## 核心模組
-- [src/core/db/db.module.ts](mdc:src/core/db/db.module.ts) - 數據庫模組，使用 MongoDB
-- [src/core/db/db.service.ts](mdc:src/core/db/db.service.ts) - 數據庫服務，實現與 MongoDB 的交互
-- [src/core/cache/cache.module.ts](mdc:src/core/cache/cache.module.ts) - 緩存模組，使用 Redis
-- [src/core/cache/cache.service.ts](mdc:src/core/cache/cache.service.ts) - 緩存服務，實現了三層緩存策略
+## 主要目錄結構
 
-## 區塊鏈特定模組
-- [src/chains/ethereum/ethereum.service.ts](mdc:src/chains/ethereum/ethereum.service.ts) - 以太坊服務，實現通過 Alchemy 查詢 ETH 資產
-- [src/chains/solana/solana.service.ts](mdc:src/chains/solana/solana.service.ts) - Solana 服務，實現通過 Alchemy 查詢 SOL 資產
+```plaintext
+src/
+├── main.ts
+├── app.module.ts
+├── app.controller.ts
+├── app.service.ts
+├── config/                # 配置模組
+│   ├── configurations.ts
+│   ├── blockchain.config.ts
+│   ├── config-validation.ts
+│   ├── config.service.ts
+│   ├── config.interface.ts
+│   ├── constants.ts
+│   └── config.module.ts
+├── common/                # 共用模組（例外處理、過濾器、常量）
+│   ├── constants/
+│   ├── filters/
+│   └── exceptions/
+├── core/                  # 核心服務模組（資料庫、快取）
+│   ├── core.module.ts
+│   ├── db/
+│   │   ├── schemas/
+│   │   ├── db.module.ts
+│   │   └── db.service.ts
+│   └── cache/
+│       ├── cache.module.ts
+│       └── cache.service.ts
+├── chains/                # 區塊鏈服務模組
+│   ├── constants/
+│   ├── decorators/
+│   ├── interceptors/
+│   ├── interfaces/
+│   ├── services/
+│   ├── controllers/
+│   ├── chains.module.ts
+│   └── index.ts
+├── balances/              # 餘額查詢模組
+│   ├── balances.module.ts
+│   ├── balance.controller.ts
+│   └── services/
+│       └── balance.service.ts
+├── providers/             # 第三方服務提供者模組
+│   ├── providers.module.ts
+│   ├── provider.factory.ts
+│   ├── provider-discovery.service.ts
+│   ├── constants/
+│   ├── implementations/
+│   ├── abstract/
+│   ├── interfaces/
+│   └── decorators/
+├── webhook/               # Webhook 處理模組
+│   ├── webhook.module.ts
+│   ├── webhook.controller.ts
+│   ├── webhook.service.ts
+│   ├── dto/
+│   └── utils/
+└── ...                    # 其他輔助資源及測試文件
+```
 
-## Webhook 模組
-- [src/webhook/webhook.service.ts](mdc:src/webhook/webhook.service.ts) - Webhook 服務，處理鏈上事件通知
-- [src/webhook/dto/webhook-event.dto.ts](mdc:src/webhook/dto/webhook-event.dto.ts) - Webhook 事件的 DTO 定義
+## 功能模組概覽
+1. **ConfigModule**      - 應用程式配置管理
+2. **CommonModule**      - 共用功能（異常處理、過濾器、常量）
+3. **CoreModule**        - 資料庫（MongoDB）與快取（Redis）服務
+4. **ChainsModule**      - 支援多鏈（Ethereum、Solana）資產與交易查詢
+5. **BalancesModule**    - 處理資產餘額查詢請求並整合鏈服務
+6. **ProvidersModule**   - 根據配置自動發現及生成區塊鏈提供者
+7. **WebhookModule**     - 處理鏈上事件 Webhook 通知
 
-## 提供者模組
-- 位於 src/providers 目錄，例如 AlchemyService
+## 配置與工具
+- `eslint.config.mjs`    - ESLint 扁平化配置
+- `tsconfig.json`        - TypeScript 編譯配置
+- `README.md`           - 專案說明
 
-## 配置
-- [eslint.config.mjs](mdc:eslint.config.mjs) - ESLint 的扁平化配置
-- [tsconfig.json](mdc:tsconfig.json) - TypeScript 配置
+## 開發規範
+
+在擴展或修改專案時，請遵循以下規範：
+
+1. **保持模組化**
+   - 相關功能應歸類到適當的模組中
+   - 每個模組應有明確的職責邊界
+
+2. **依賴注入**
+   - 使用 NestJS 的依賴注入機制
+   - 避免直接實例化服務類
+
+3. **統一錯誤處理**
+   - 使用 NestJS 的異常過濾器
+   - 保持一致的錯誤響應格式
+
+4. **適當日誌記錄**
+   - 使用 NestJS 的 Logger 服務
+   - 記錄關鍵操作和錯誤情況
+
+## 擴展指南
+
+要添加對新區塊鏈的支持，請按照以下步驟：
+
+1. 在 `constants/index.ts` 中添加新的鏈類型
+2. 在 `services/` 目錄中創建新的鏈特定目錄和服務類
+3. 實現 `ChainService` 介面（推薦繼承 `AbstractChainService`）
+4. 使用 `@Chain()` 裝飾器標記新服務
+5. 創建新的鏈特定模組並在主鏈模組中導入
+
+## 目錄結構最佳實踐
+
+- **按功能劃分**：相關功能應該放在同一目錄下
+- **按層級組織**：從抽象到具體，從介面到實現
+- **保持一致性**：所有鏈服務都應遵循相同的目錄結構
+- **避免循環依賴**：確保模組間依賴關係清晰，避免循環引用
+- **單一職責**：每個文件應該專注於單一職責，避免過大的文件
