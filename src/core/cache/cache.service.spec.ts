@@ -8,6 +8,11 @@ import { AppConfigService } from '../../config/config.service';
 const createMockRedisClient = () => ({
   scan: jest.fn().mockResolvedValue({ cursor: '0', keys: ['test:key1', 'test:key2'] }),
   unlink: jest.fn().mockResolvedValue(2),
+  ping: jest.fn().mockResolvedValue('PONG'),
+  isOpen: true,
+  on: jest.fn(),
+  connect: jest.fn().mockResolvedValue(true),
+  quit: jest.fn().mockResolvedValue('OK'),
 });
 
 describe('CacheService', () => {
@@ -77,12 +82,12 @@ describe('CacheService', () => {
         {
           opts: {
             store: {
-              _client: mockRedisClient,
+              _redis: mockRedisClient,
             },
           },
         },
       ],
-      isRedisStore: false,
+      isRedisStore: true,
     };
 
     const mockAppConfigService = {
@@ -137,8 +142,12 @@ describe('CacheService', () => {
     it('get 方法在出錯時應該返回 null', async () => {
       mockCacheManager.get.mockRejectedValue(new Error('Cache error'));
 
-      const result = await service.get('test-key');
-      expect(result).toBeNull();
+      try {
+        await service.get('test-key');
+        fail('應該拋出例外');
+      } catch (err) {
+        expect(err.message).toContain('獲取快取失敗');
+      }
     });
 
     it('set 方法應該使用預設 TTL 設置快取', async () => {
@@ -154,8 +163,12 @@ describe('CacheService', () => {
     it('set 方法在出錯時應該正確處理', async () => {
       mockCacheManager.set.mockRejectedValue(new Error('Cache set error'));
 
-      await service.set('test-key', 'test-value');
-      // 應該不會拋出錯誤
+      try {
+        await service.set('test-key', 'test-value');
+        fail('應該拋出例外');
+      } catch (err) {
+        expect(err.message).toContain('設置快取失敗');
+      }
     });
 
     it('delete 方法應該刪除快取', async () => {
@@ -166,8 +179,12 @@ describe('CacheService', () => {
     it('delete 方法在出錯時應該正確處理', async () => {
       mockCacheManager.del.mockRejectedValue(new Error('Cache delete error'));
 
-      await service.delete('test-key');
-      // 應該不會拋出錯誤
+      try {
+        await service.delete('test-key');
+        fail('應該拋出例外');
+      } catch (err) {
+        expect(err.message).toContain('設置快取失敗');
+      }
     });
 
     it('deleteByPattern 方法在記憶體模式下應該返回 0', async () => {
@@ -209,6 +226,25 @@ describe('CacheService', () => {
       });
       expect(mockRedisClient.unlink).toHaveBeenCalledWith(['test:key1', 'test:key2']);
       expect(result).toBe(2);
+    });
+
+    it('當 Redis 客戶端關閉時，deleteByPattern 方法應嘗試重新連接', async () => {
+      mockRedisClient.isOpen = false;
+
+      const result = await service.deleteByPattern('test:*');
+
+      expect(mockRedisClient.connect).toHaveBeenCalled();
+      expect(mockRedisClient.scan).toHaveBeenCalled();
+      expect(result).toBe(2);
+    });
+
+    it('isRedisConnected 方法應該正確檢測 Redis 連接狀態', async () => {
+      const result = await service.isRedisConnected();
+      expect(result).toBe(true);
+
+      mockRedisClient.isOpen = false;
+      const resultDisconnected = await service.isRedisConnected();
+      expect(resultDisconnected).toBe(false);
     });
   });
 
