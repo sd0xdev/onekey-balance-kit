@@ -771,7 +771,7 @@ export class EthereumQuickNodeProvider extends AbstractEthereumProviderService {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logError(`Failed to get NFT transfer history: ${errorMessage}`);
-      throw new Error(`Failed to get NFT transfer history: ${errorMessage}`);
+      return [];
     }
   }
 
