@@ -123,7 +123,7 @@ export class BalanceService {
       }
 
       // 調用鏈服務的 getBalances 方法獲取餘額
-      const balanceData = await chainService.getBalances(address, false);
+      const balanceData = await chainService.getBalances(address, chainId);
 
       if (!balanceData) {
         throw new BalanceException(

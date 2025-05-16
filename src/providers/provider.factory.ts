@@ -18,7 +18,7 @@ import {
   ProviderRegistration,
 } from './constants/provider-registration';
 import { ProviderDiscoveryService } from './provider-discovery.service';
-import { ChainName, COIN_SYMBOL_TO_CHAIN_MAP } from '../chains/constants';
+import { ChainName, COIN_SYMBOL_TO_CHAIN_MAP, CHAIN_INFO_MAP } from '../chains/constants';
 
 /**
  * 提供者工廠類
@@ -150,26 +150,30 @@ export class ProviderFactory implements OnModuleInit {
    * @returns EVM提供者實例
    */
   getEvmProvider(chainId: number, providerType?: ProviderType | string): EthereumProviderInterface {
-    // 根據chainId找到對應的blockchain類型
-    const blockchain = this.getBlockchainTypeByChainId(chainId) || ChainName.ETHEREUM;
-    return this.getProvider(blockchain, providerType) as EthereumProviderInterface;
+    // 通過 chainId 反向映射到區塊鏈類型
+    const blockchainType = this.getChainTypeFromChainId(chainId);
+
+    if (!blockchainType) {
+      throw new NotFoundException(`沒有找到 chainId ${chainId} 對應的區塊鏈類型`);
+    }
+
+    // 使用現有的 getProvider 方法獲取提供者
+    return this.getProvider(blockchainType, providerType) as EthereumProviderInterface;
   }
 
   /**
-   * 根據鏈ID獲取對應的區塊鏈類型
-   * @param chainId 鏈ID
+   * 根據 chainId 獲取區塊鏈類型
+   * @param chainId 鏈 ID
    * @returns 區塊鏈類型
    */
-  private getBlockchainTypeByChainId(chainId: number): ChainName | undefined {
-    // 這裡簡單硬編碼一下常見鏈ID對應的blockchain類型，後續可以優化為動態配置
-    const chainIdToBlockchain: Record<number, ChainName> = {
-      1: ChainName.ETHEREUM, // Ethereum Mainnet
-      137: ChainName.POLYGON, // Polygon Mainnet
-      56: ChainName.BSC, // BSC Mainnet
-      // 後續可以擴展更多鏈
-    };
-
-    return chainIdToBlockchain[chainId];
+  private getChainTypeFromChainId(chainId: number): ChainName | null {
+    // 遍歷 CHAIN_INFO_MAP 查找匹配的 chainId
+    for (const [chainName, chainInfo] of Object.entries(CHAIN_INFO_MAP)) {
+      if (chainInfo.id === chainId) {
+        return chainName as ChainName;
+      }
+    }
+    return null;
   }
 
   /**

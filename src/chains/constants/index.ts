@@ -17,6 +17,8 @@ export enum ChainName {
   ETHEREUM_GOERLI = 'ethereum_goerli',
   ETHEREUM_SEPOLIA = 'ethereum_sepolia',
   SOLANA_DEVNET = 'solana_devnet',
+  BSC_TESTNET = 'bsc_testnet',
+  POLYGON_MUMBAI = 'polygon_mumbai',
   // 可以在這裡添加更多的鏈
 }
 
@@ -62,6 +64,8 @@ export function isEvmChain(chainName: ChainName): boolean {
     ChainName.BSC,
     ChainName.ETHEREUM_GOERLI,
     ChainName.ETHEREUM_SEPOLIA,
+    ChainName.BSC_TESTNET,
+    ChainName.POLYGON_MUMBAI,
   ].includes(chainName);
 }
 
@@ -131,6 +135,24 @@ export const CHAIN_INFO_MAP: Record<ChainName, BaseChainInfo> = {
     mainnetRef: ChainName.SOLANA,
     networkIdentifier: 'SOL_DEVNET',
   },
+  [ChainName.BSC_TESTNET]: {
+    id: 97,
+    name: ChainName.BSC_TESTNET,
+    display: 'BNB Smart Chain Testnet',
+    coinSymbols: ['bsc', 'bnb', 'testnet'],
+    isMainnet: false,
+    mainnetRef: ChainName.BSC,
+    networkIdentifier: 'BSC_TESTNET',
+  },
+  [ChainName.POLYGON_MUMBAI]: {
+    id: 80001,
+    name: ChainName.POLYGON_MUMBAI,
+    display: 'Polygon Mumbai',
+    coinSymbols: ['poly', 'matic', 'polygon', 'mumbai'],
+    isMainnet: false,
+    mainnetRef: ChainName.POLYGON,
+    networkIdentifier: 'POLY_MUMBAI',
+  },
 };
 
 /**
@@ -189,6 +211,16 @@ export const EVM_CHAIN_INFO_MAP: Partial<Record<ChainName, EvmChainInfo>> = {
   [ChainName.ETHEREUM_SEPOLIA]: {
     ...CHAIN_INFO_MAP[ChainName.ETHEREUM_SEPOLIA],
     symbol: 'ETH',
+    decimals: 18,
+  },
+  [ChainName.BSC_TESTNET]: {
+    ...CHAIN_INFO_MAP[ChainName.BSC_TESTNET],
+    symbol: 'BNB',
+    decimals: 18,
+  },
+  [ChainName.POLYGON_MUMBAI]: {
+    ...CHAIN_INFO_MAP[ChainName.POLYGON_MUMBAI],
+    symbol: 'MATIC',
     decimals: 18,
   },
 };

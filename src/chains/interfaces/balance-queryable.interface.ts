@@ -23,15 +23,11 @@ export interface BalanceQueryable {
   /**
    * 獲取特定地址的餘額資訊
    * @param address 區塊鏈地址
-   * @param useTestnet 是否使用測試網絡，默認為 false
+   * @param chainId 可選的鏈ID，如未指定則使用當前設定的鏈ID
    * @param providerType 指定使用的提供者類型，默認使用配置中的默認提供者
    * @returns 包含餘額信息的對象
    */
-  getBalances(
-    address: string,
-    useTestnet?: boolean,
-    providerType?: string,
-  ): Promise<BalanceResponse>;
+  getBalances(address: string, chainId?: number, providerType?: string): Promise<BalanceResponse>;
 }
 
 /**

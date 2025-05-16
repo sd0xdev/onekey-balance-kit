@@ -485,7 +485,8 @@ export class EthereumQuickNodeProvider extends AbstractEthereumProviderService {
 
       // 處理 value 字段
       if (txData.value) {
-        const valueStr = typeof txData.value === 'number' ? txData.value.toString() : txData.value;
+        // 確保 value 是字串類型
+        const valueStr = txData.value;
         transaction.value = valueStr.startsWith('0x')
           ? (valueStr as `0x${string}`)
           : `0x${BigInt(valueStr).toString(16)}`;

@@ -172,7 +172,7 @@ export class CacheKeyService {
   ): Promise<number> {
     const pattern = `${CacheKeyPrefix.PORTFOLIO}:${chain}:${chainId}:${address}*`;
     this.logger.debug(`Invalidating chain address cache with pattern: ${pattern}`);
-    return this.cacheService.deleteByPattern(pattern);
+    return await this.cacheService.deleteByPattern(pattern);
   }
 
   /**

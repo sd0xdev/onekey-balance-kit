@@ -5,6 +5,7 @@ import { MetadataScanner } from '@nestjs/core/metadata-scanner';
 import { BlockchainProviderInterface } from './interfaces/blockchain-provider.interface';
 import { PROVIDER_METADATA } from './constants/provider-metadata';
 import { ProviderRegistration } from './constants/provider-registration';
+import { ProviderMeta } from './decorators/provider.decorator';
 
 @Injectable()
 export class ProviderDiscoveryService {
@@ -32,15 +33,20 @@ export class ProviderDiscoveryService {
       const metadata = this.reflector.get(PROVIDER_METADATA, metatype);
 
       if (metadata) {
-        const { blockchainType, providerType } = metadata;
+        const { blockchainTypes, providerType } = metadata;
         // 確保 metatype 是 Type<BlockchainProviderInterface> 類型
         const providerClass = metatype as Type<BlockchainProviderInterface>;
 
-        result.push({
-          blockchainType,
-          providerType,
-          providerClass,
-        });
+        // 為每個支援的區塊鏈類型創建一個註冊
+        if (blockchainTypes) {
+          blockchainTypes.forEach((blockchainType) => {
+            result.push({
+              blockchainType,
+              providerType,
+              providerClass,
+            });
+          });
+        }
       }
     });
 
