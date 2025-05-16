@@ -295,6 +295,11 @@ A: 參考[區塊鏈提供者](.cursor/rules/blockchain-providers.mdc)文檔，�
 ### 5. DevOps & CI/CD
 
 - [x] GitHub Actions （CI Pipeline）
+  - [x] lint
+  - [x] 單元測試
+  - [x] 覆蓋率報告
+  - [x] 部署
+  - [x] Release Deployment
 - [x] Docker （多階段 Build）
 - [x] Docker Compose （本地開發）
   - [ ] 本地運行
