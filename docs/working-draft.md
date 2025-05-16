@@ -176,6 +176,16 @@ Redis Upstash ≤ 10 K Cmd/月免費；Mongo Atlas M0 免費。超量後
 ## 7. Roadmap
 
 - ETH Mainnet MVP
-- Solana 上線
-- Arbitrum / Optimism 插件
-- 前端 Dashboard (Next.js + shadcn/ui)
+- 多鏈抽象／L2／BTC／Solana / Discovery
+- Provider 抽象／Discovery
+- 前端 Dashboard / SSE 通知
+- 後端快取
+- 資產走勢（利用過期快取數據組合）
+- 價格 API 組合資產現值
+- 精細快取失效
+  - 鏈上活動
+  - 資產變動
+  - 資產走勢
+- 通知
+  - 前端 Dashboard
+  - SSE 通知

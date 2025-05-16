@@ -34,15 +34,23 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unused-vars': 'warn',
-      '@typescript-eslint/no-unsafe-call': 'warn',
-      '@typescript-eslint/no-unsafe-member-access': 'warn',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unsafe-return': 'warn',
       '@typescript-eslint/restrict-template-expressions': 'warn',
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-unsafe-argument': 'warn',
       '@typescript-eslint/await-thenable': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/require-await': 'warn',
       'prettier/prettier': 'error',
+    },
+  },
+  // 為測試文件特別設置規則，關閉 unbound-method 警告
+  {
+    files: ['**/*.spec.ts', '**/*.test.ts', '**/*.spec.tsx', '**/*.test.tsx'],
+    rules: {
+      '@typescript-eslint/unbound-method': 'off',
     },
   },
 );

@@ -12,6 +12,8 @@ import { SolanaService } from './services/solana/solana.service';
 import { PolygonService } from './services/polygon/polygon.service';
 import { BscService } from './services/bsc/bsc.service';
 import { ChainsController } from './controllers/chains.controller';
+import { ChainIdController } from './controllers/chain-id.controller';
+import { ChainRouter } from './services/core/chain-router.service';
 import { ProvidersModule } from '../providers/providers.module';
 
 /**
@@ -28,7 +30,8 @@ import { ProvidersModule } from '../providers/providers.module';
     ProvidersModule, // 提供鏈服務所需的提供者
   ],
   controllers: [
-    ChainsController, // 鏈服務 API 控制器
+    ChainsController, // 傳統鏈名稱API控制器
+    ChainIdController, // 新增基於chainId的API控制器
   ],
   providers: [
     // 核心服務
@@ -36,6 +39,7 @@ import { ProvidersModule } from '../providers/providers.module';
     BlockchainService,
     RequestContextService,
     DiscoveryService,
+    ChainRouter, // 新增鏈路由服務
     MetadataScanner,
     Reflector,
 
@@ -54,6 +58,7 @@ import { ProvidersModule } from '../providers/providers.module';
   exports: [
     ChainServiceFactory,
     BlockchainService,
+    ChainRouter, // 導出鏈路由服務
     EthereumService,
     SolanaService,
     PolygonService,
@@ -88,7 +93,10 @@ export class ChainsModule {
         DiscoveryModule,
         ProvidersModule,
       ],
-      controllers: [ChainsController],
+      controllers: [
+        ChainsController,
+        ChainIdController, // 註冊新控制器
+      ],
       providers: [
         // 提供配置選項
         {
@@ -100,6 +108,7 @@ export class ChainsModule {
         BlockchainService,
         RequestContextService,
         DiscoveryService,
+        ChainRouter, // 註冊鏈路由服務
         MetadataScanner,
         Reflector,
 
@@ -118,6 +127,7 @@ export class ChainsModule {
       exports: [
         ChainServiceFactory,
         BlockchainService,
+        ChainRouter, // 導出鏈路由服務
         EthereumService,
         SolanaService,
         PolygonService,

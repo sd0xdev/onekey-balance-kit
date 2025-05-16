@@ -1,12 +1,16 @@
-import { Module, Logger } from '@nestjs/common';
+import { Module, Logger, Global } from '@nestjs/common';
 import { CacheModule as NestCacheModule } from '@nestjs/cache-manager';
 import { CacheService } from './cache.service';
 import { CacheKeyService } from './cache-key.service';
+import { CacheMongoService } from './cache-mongo.service';
+import { PortfolioCacheListener } from './portfolio-cache.listener';
 import { AppConfigService } from '../../config/config.service';
 import { ConfigsModule } from '../../config';
+import { DbModule } from '../db/db.module';
 import { createKeyv } from '@keyv/redis';
 import { Keyv } from 'keyv';
 import type { RedisClientOptions } from '@redis/client';
+import { NotificationModule } from '../../notification/notification.module';
 
 // 自定義 CacheOptions 接口，以支持 isRedisStore 標記
 interface CustomCacheOptions {
@@ -15,9 +19,14 @@ interface CustomCacheOptions {
   isRedisStore?: boolean;
 }
 
+@Global()
 @Module({
   imports: [
     ConfigsModule,
+    // 導入 DbModule，以便訪問 MongoDB 服務
+    DbModule,
+    // 導入 NotificationModule，以便使用事件發布服務
+    NotificationModule,
     NestCacheModule.registerAsync({
       isGlobal: true,
       imports: [ConfigsModule],
@@ -69,7 +78,7 @@ interface CustomCacheOptions {
       },
     }),
   ],
-  providers: [CacheService, CacheKeyService],
-  exports: [CacheService, CacheKeyService, NestCacheModule],
+  providers: [CacheService, CacheKeyService, CacheMongoService, PortfolioCacheListener],
+  exports: [CacheService, CacheKeyService, CacheMongoService, NestCacheModule],
 })
 export class CacheModule {}

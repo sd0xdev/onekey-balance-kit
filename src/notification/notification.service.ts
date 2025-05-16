@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { CacheKeyService } from '../core/cache/cache-key.service';
 import { ChainName } from '../chains/constants';
+import { ProviderType } from '../providers/constants/blockchain-types';
 
 // 事件類型枚舉
 export enum NotificationEventType {
@@ -11,6 +12,8 @@ export enum NotificationEventType {
   TRANSACTION_MINED = 'transaction.mined',
   TRANSACTION_DROPPED = 'transaction.dropped',
   CUSTOM_EVENT = 'custom.event',
+  PORTFOLIO_UPDATE = 'portfolio.update',
+  PORTFOLIO_REDIS_UPDATED = 'portfolio.redis.updated',
 }
 
 // 通知事件基類
@@ -62,6 +65,34 @@ export class TransactionMinedEvent extends NotificationEvent {
 export class CustomEvent extends NotificationEvent {
   constructor(public readonly data: Record<string, any>) {
     super(NotificationEventType.CUSTOM_EVENT);
+  }
+}
+
+// 投資組合更新事件
+export class PortfolioUpdateEvent extends NotificationEvent {
+  constructor(
+    public readonly chain: ChainName,
+    public readonly chainId: number,
+    public readonly address: string,
+    public readonly portfolioData: any,
+    public readonly provider?: ProviderType,
+    public readonly ttlSeconds?: number,
+  ) {
+    super(NotificationEventType.PORTFOLIO_UPDATE);
+  }
+}
+
+// Redis 中的投資組合數據更新事件，用於觸發 MongoDB 寫入
+export class PortfolioRedisUpdatedEvent extends NotificationEvent {
+  constructor(
+    public readonly chain: ChainName,
+    public readonly chainId: number,
+    public readonly address: string,
+    public readonly portfolioData: any,
+    public readonly provider?: ProviderType,
+    public readonly mongoTtlSeconds?: number, // MongoDB 特有的 TTL 設置
+  ) {
+    super(NotificationEventType.PORTFOLIO_REDIS_UPDATED);
   }
 }
 
@@ -118,36 +149,46 @@ export class NotificationService {
     this.eventEmitter.emit(NotificationEventType.CUSTOM_EVENT, event);
   }
 
-  // 監聽地址活動事件並處理
-  @OnEvent(NotificationEventType.ADDRESS_ACTIVITY)
-  async handleAddressActivity(event: AddressActivityEvent): Promise<void> {
-    try {
-      this.logger.debug(
-        `Handling address activity: ${event.chain}:${event.chainId}:${event.address}`,
-      );
+  // 發送投資組合更新事件
+  emitPortfolioUpdate(
+    chain: ChainName,
+    chainId: number,
+    address: string,
+    portfolioData: any,
+    provider?: ProviderType,
+    ttlSeconds?: number,
+  ): void {
+    const event = new PortfolioUpdateEvent(
+      chain,
+      chainId,
+      address,
+      portfolioData,
+      provider,
+      ttlSeconds,
+    );
+    this.logger.debug(`Emitting portfolio update event: ${chain}:${chainId}:${address}`);
+    this.eventEmitter.emit(NotificationEventType.PORTFOLIO_UPDATE, event);
+  }
 
-      // 執行緩存清理
-      const deletedCount = await this.cacheKeyService.invalidateChainAddressCache(
-        event.chain,
-        event.chainId,
-        event.address,
-      );
-
-      this.logger.debug(
-        `Invalidated ${deletedCount} cache entries for ${event.chain}:${event.chainId}:${event.address}`,
-      );
-
-      // 這裡可以添加其他處理邏輯，例如：
-      // - 發送推送通知
-      // - 更新資料庫狀態
-      // - 觸發 WebSocket 事件
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error(
-        `Failed to handle address activity: ${errorMessage}`,
-        error instanceof Error ? error.stack : undefined,
-      );
-    }
+  // 發送 Redis 中的投資組合數據已更新事件，用於觸發 MongoDB 寫入
+  emitPortfolioRedisUpdated(
+    chain: ChainName,
+    chainId: number,
+    address: string,
+    portfolioData: any,
+    provider?: ProviderType,
+    mongoTtlSeconds?: number, // MongoDB 特有的 TTL 設置
+  ): void {
+    const event = new PortfolioRedisUpdatedEvent(
+      chain,
+      chainId,
+      address,
+      portfolioData,
+      provider,
+      mongoTtlSeconds,
+    );
+    this.logger.debug(`Emitting portfolio Redis updated event: ${chain}:${chainId}:${address}`);
+    this.eventEmitter.emit(NotificationEventType.PORTFOLIO_REDIS_UPDATED, event);
   }
 
   // 監聽 NFT 活動事件並處理

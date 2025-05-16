@@ -6,13 +6,13 @@ import { BlockchainProviderInterface, NetworkType } from './blockchain-provider.
 export interface EthereumTransactionRequest {
   from: string;
   to?: string;
-  value?: string | number;
+  value?: string;
   data?: string;
   nonce?: number;
-  gasLimit?: string | number;
-  gasPrice?: string | number;
-  maxFeePerGas?: string | number;
-  maxPriorityFeePerGas?: string | number;
+  gasLimit?: string;
+  gasPrice?: string;
+  maxFeePerGas?: string;
+  maxPriorityFeePerGas?: string;
   type?: number;
 }
 

@@ -4,6 +4,12 @@ import { DbService } from './db.service';
 import { AppConfigService } from '../../config';
 import { ConfigsModule } from '../../config/config.module';
 import { WebhookEvent, WebhookEventSchema } from './schemas/webhook-event.schema';
+import { PortfolioSnapshot, PortfolioSnapshotSchema } from './schemas/portfolio-snapshot.schema';
+import { PortfolioHistory, PortfolioHistorySchema } from './schemas/portfolio-history.schema';
+import { TxHistory, TxHistorySchema } from './schemas/tx-history.schema';
+import { NftOwner, NftOwnerSchema } from './schemas/nft-owner.schema';
+import { NftMeta, NftMetaSchema } from './schemas/nft-meta.schema';
+import { PriceCache, PriceCacheSchema } from './schemas/price-cache.schema';
 
 @Module({
   imports: [
@@ -31,7 +37,15 @@ import { WebhookEvent, WebhookEventSchema } from './schemas/webhook-event.schema
       },
     }),
     // 註冊所有 Schema
-    MongooseModule.forFeature([{ name: WebhookEvent.name, schema: WebhookEventSchema }]),
+    MongooseModule.forFeature([
+      { name: WebhookEvent.name, schema: WebhookEventSchema },
+      { name: PortfolioSnapshot.name, schema: PortfolioSnapshotSchema },
+      { name: PortfolioHistory.name, schema: PortfolioHistorySchema },
+      { name: TxHistory.name, schema: TxHistorySchema },
+      { name: NftOwner.name, schema: NftOwnerSchema },
+      { name: NftMeta.name, schema: NftMetaSchema },
+      { name: PriceCache.name, schema: PriceCacheSchema },
+    ]),
   ],
   providers: [DbService],
   exports: [

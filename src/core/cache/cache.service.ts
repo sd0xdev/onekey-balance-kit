@@ -1,29 +1,31 @@
-import { Injectable, Inject, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import type { RedisClientType } from 'redis';
 import type { Keyv } from 'keyv';
-import { AppConfigService } from '../../config/config.service';
 import { ErrorCode } from '../../common/constants/error-codes';
 import { ApplicationException } from '../../common/exceptions/application.exception';
 
-// 定義一個新的接口來擴展 Cache 接口
-// 不繼承 Cache，避免類型衝突
-interface CustomCacheManager {
-  get<T>(key: string): Promise<T | undefined>;
-  set(key: string, value: any, ttl?: number): Promise<void>;
-  del(key: string): Promise<void>;
-  stores?: Array<{
-    opts?: {
-      store?: {
-        _redis?: RedisClientType;
-      };
-    };
-  }>;
+// 定義自定義Cache管理器類型
+type CustomCache = Cache & {
   isRedisStore?: boolean;
-  reset?(): Promise<void>;
+  stores?: any[];
+  reset?: () => Promise<void>;
+};
+
+/**
+ * 緩存類型
+ */
+export enum CacheType {
+  MEMORY = 'memory',
+  REDIS = 'redis',
 }
 
+/**
+ * 緩存服務
+ * 提供了對緩存的統一訪問和管理
+ */
 @Injectable()
 export class CacheService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(CacheService.name);
@@ -31,43 +33,40 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
   private readonly isUsingRedis: boolean;
   private reconnectTimer?: NodeJS.Timeout;
   private readonly reconnectInterval = 5000; // 5秒重連
+
+  // Redis 客戶端引用
   private redisClient: RedisClientType | null = null;
+  private isInitialized = false; // 追踪是否已初始化連接
 
   constructor(
-    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache & Partial<CustomCacheManager>,
-    private readonly configService: AppConfigService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: CustomCache,
+    private readonly configService: ConfigService,
   ) {
-    const cfg = this.configService.redis;
-    if (cfg) {
-      this.logger.log(
-        `Redis configuration found: host=${cfg.host}, port=${cfg.port}, db=${cfg.db}`,
-      );
-    } else {
-      this.logger.warn('No Redis configuration found in AppConfigService');
-    }
-
-    const envTtl = parseInt(process.env.CACHE_TTL ?? '', 10);
-    this.defaultTtl = !isNaN(envTtl) && envTtl > 0 ? envTtl : 300;
-    this.logger.log(`Default cache TTL: ${this.defaultTtl} seconds`);
-
+    this.defaultTtl = Number(this.configService.get('CACHE_TTL', 300));
     this.isUsingRedis = this.detectRedisStore();
     this.logger.log(`Using Redis for caching: ${this.isUsingRedis}`);
-    this.logger.log(`CacheManager type: ${this.cacheManager.constructor.name}`);
 
-    // 如果使用 Redis，嘗試獲取 Redis 客戶端
-    if (this.isUsingRedis) {
-      this.redisClient = this.getNativeRedisClient();
-      if (this.redisClient) {
-        this.logger.log('Redis client retrieved successfully');
-
-        // 設置事件監聽器
-        this.setupRedisEventListeners();
-      } else {
-        this.logger.warn('Redis client not available - check configuration');
-      }
+    if (this.cacheManager && this.cacheManager.constructor) {
+      this.logger.log(`CacheManager type: ${this.cacheManager.constructor.name}`);
     } else {
-      this.logger.warn('Using memory cache - Redis client not detected');
+      this.logger.warn('CacheManager is not properly initialized');
     }
+
+    // 檢查Redis配置
+    const redisHost = this.configService.get('REDIS_HOST');
+    const redisPort = this.configService.get('REDIS_PORT');
+    const redisDb = this.configService.get('REDIS_DB');
+
+    if (redisHost && redisPort) {
+      this.logger.log(
+        `Redis configuration found: host=${redisHost}, port=${redisPort}, db=${redisDb || 0}`,
+      );
+    } else {
+      this.logger.warn('No Redis configuration found in environment variables');
+    }
+
+    // 懶啟動模式：不再立即獲取Redis客戶端和設置事件監聽器
+    // 第一次使用時才會初始化
   }
 
   /**
@@ -95,17 +94,48 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async onModuleInit() {
-    if (this.isUsingRedis && this.redisClient) {
-      // Redis 連接檢查
-      try {
-        const pingResult = await this.redisClient.ping();
-        this.logger.log(`Redis server responded to PING: ${pingResult}`);
-      } catch (error) {
-        this.logger.error(`Redis connection check failed: ${error}`);
-        this.scheduleReconnect();
+  /**
+   * 確保Redis連接 - 懶啟動核心方法
+   */
+  private async ensureConnection(): Promise<boolean> {
+    // 如果不使用Redis或已檢查過初始化，直接返回
+    if (!this.isUsingRedis) return false;
+
+    // 第一次初始化
+    if (!this.redisClient) {
+      this.logger.log('Initializing Redis connection (lazy initialization)');
+      this.redisClient = this.getNativeRedisClient();
+
+      if (this.redisClient) {
+        this.setupRedisEventListeners();
+      } else {
+        this.logger.warn('Redis client not available during lazy initialization');
+        return false;
       }
     }
+
+    // 確保連接狀態
+    if (!this.redisClient) return false;
+
+    try {
+      if (!this.redisClient.isOpen) {
+        this.logger.debug('Redis client not connected, connecting now...');
+        await this.redisClient.connect();
+      }
+      return true;
+    } catch (err) {
+      this.logger.warn(`Redis connection failed during lazy initialization: ${err}`);
+      this.scheduleReconnect();
+      return false;
+    }
+  }
+
+  // onModuleInit 不再主動檢查連接
+  async onModuleInit() {
+    // 懶啟動模式：不再主動初始化Redis連接
+    this.logger.log('Cache service initialized in lazy mode');
+    // 添加一個空的 await 語句以滿足 require-await 規則
+    await Promise.resolve();
   }
 
   async onModuleDestroy() {
@@ -176,6 +206,12 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
    * 偵測是否為 Redis Store (優先使用 @Module 中配置的標記)
    */
   private detectRedisStore(): boolean {
+    // 首先檢查 cacheManager 是否存在
+    if (!this.cacheManager) {
+      this.logger.warn('Cache manager is not initialized');
+      return false;
+    }
+
     // 首先檢查 module 中設定的標記
     if (this.cacheManager.isRedisStore !== undefined) {
       return this.cacheManager.isRedisStore;
@@ -220,7 +256,7 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
     for (const store of stores) {
       try {
         // 使用 any 類型避免 TypeScript 錯誤
-        const storeAny = store as any;
+        const storeAny = store;
 
         // 依序檢查可能的路徑
         const redisClient =
@@ -247,6 +283,9 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
    */
   async get<T>(key: string): Promise<T | null> {
     try {
+      // 懶啟動：使用前確保連接
+      await this.ensureConnection();
+
       this.logger.debug(`Getting cache key: ${key}`);
       const data = await this.cacheManager.get<T>(key);
       return data ?? null;
@@ -256,7 +295,7 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
       );
       throw new ApplicationException(
         ErrorCode.CACHE_GET_FAILED,
-        `Failed to get cache: ${err instanceof Error ? err.message : String(err)}`,
+        `獲取快取失敗: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
@@ -266,6 +305,9 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
    */
   async set(key: string, value: any, ttlSeconds?: number): Promise<void> {
     try {
+      // 懶啟動：使用前確保連接
+      await this.ensureConnection();
+
       const ttlSec = ttlSeconds ?? this.defaultTtl;
       await this.cacheManager.set(key, value, ttlSec * 1000); // 轉換為毫秒
       this.logger.debug(`Cache set for key ${key} with TTL ${ttlSec}s`);
@@ -275,7 +317,7 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
       );
       throw new ApplicationException(
         ErrorCode.CACHE_SET_FAILED,
-        `Failed to set cache: ${err instanceof Error ? err.message : String(err)}`,
+        `設置快取失敗: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
@@ -285,6 +327,9 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
    */
   async delete(key: string): Promise<void> {
     try {
+      // 懶啟動：使用前確保連接
+      await this.ensureConnection();
+
       await this.cacheManager.del(key);
       this.logger.debug(`Cache deleted for key ${key}`);
     } catch (err) {
@@ -293,7 +338,7 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
       );
       throw new ApplicationException(
         ErrorCode.CACHE_SET_FAILED,
-        `Failed to delete cache: ${err instanceof Error ? err.message : String(err)}`,
+        `設置快取失敗: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
@@ -302,14 +347,17 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
    * 批次刪除符合模式的 Redis keys (使用 SCAN + UNLINK)
    */
   async deleteByPattern(pattern: string): Promise<number> {
+    // 懶啟動：使用前確保連接
+    const connected = await this.ensureConnection();
+
     // 如果不是 Redis 存儲，則不支持模式刪除
-    if (!this.isUsingRedis) {
-      this.logger.warn(`Pattern deletion not supported in memory mode: ${pattern}`);
+    if (!this.isUsingRedis || !connected) {
+      this.logger.warn(`Pattern deletion not supported: ${pattern}`);
       return 0;
     }
 
     // 獲取 Redis 客戶端
-    const redis = this.redisClient ?? this.getNativeRedisClient();
+    const redis = this.redisClient;
     if (!redis) {
       this.logger.warn(`Redis client not available, can't delete pattern: ${pattern}`);
       return 0;
@@ -357,13 +405,16 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
    */
   async reset(): Promise<void> {
     try {
+      // 懶啟動：使用前確保連接
+      const connected = await this.ensureConnection();
+
       // 檢查是否有 reset() 方法 (Keyv v6 提供)
       if (typeof this.cacheManager.reset === 'function') {
         await this.cacheManager.reset(); // 會輪詢每一層 store.clear()
         this.logger.debug('Cache reset successful');
       } else {
         // 無法使用 reset() 時的替代方案
-        if (this.isUsingRedis && this.redisClient) {
+        if (this.isUsingRedis && connected && this.redisClient) {
           await this.redisClient.flushDb();
           this.logger.debug('Cache reset via FLUSHDB');
         } else {

@@ -1,28 +1,59 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Alchemy, Network, TokenBalanceType, OwnedNft } from 'alchemy-sdk';
-import { AbstractEthereumProviderService } from '../../abstract/abstract-ethereum-provider.service';
+import { AbstractEvmProviderService } from '../../abstract/abstract-evm-provider.service';
 import { BalancesResponse, NetworkType } from '../../interfaces/blockchain-provider.interface';
-import { EthereumTransactionRequest } from '../../interfaces/ethereum-provider.interface';
+import { EthereumTransactionRequest } from '../../interfaces/evm-provider.interface';
 import { ProviderType } from '../../constants/blockchain-types';
 import { Provider } from '../../decorators/provider.decorator';
 import { formatUnits } from 'ethers';
 import { ChainName } from '../../../chains/constants';
 
+// 定義 Alchemy 網絡映射
+const ALCHEMY_NETWORK_MAP: Partial<Record<ChainName, Network>> = {
+  [ChainName.ETHEREUM]: Network.ETH_MAINNET,
+  [ChainName.ETHEREUM_GOERLI]: Network.ETH_GOERLI,
+  [ChainName.ETHEREUM_SEPOLIA]: Network.ETH_SEPOLIA,
+  [ChainName.POLYGON]: Network.MATIC_MAINNET,
+  [ChainName.POLYGON_MUMBAI]: Network.MATIC_MUMBAI,
+};
+
+// 定義每條鏈的環境變數前綴
+const ENV_PREFIX_MAP: Partial<Record<ChainName, string>> = {
+  [ChainName.ETHEREUM]: 'ETH',
+  [ChainName.ETHEREUM_GOERLI]: 'ETH',
+  [ChainName.ETHEREUM_SEPOLIA]: 'ETH',
+  [ChainName.POLYGON]: 'POLYGON',
+  [ChainName.POLYGON_MUMBAI]: 'POLYGON',
+};
+
 /**
- * Alchemy 以太坊提供者實現
+ * Alchemy EVM 鏈提供者實現
+ * 支援多個 EVM 區塊鏈
  */
 @Provider({
-  blockchainType: ChainName.ETHEREUM,
+  blockchainType: [
+    ChainName.ETHEREUM,
+    ChainName.ETHEREUM_GOERLI,
+    ChainName.ETHEREUM_SEPOLIA,
+    ChainName.POLYGON,
+    ChainName.POLYGON_MUMBAI,
+  ],
   providerType: ProviderType.ALCHEMY,
 })
 @Injectable()
-export class EthereumAlchemyProvider extends AbstractEthereumProviderService {
-  private ethereumMainnetClient: Alchemy;
-  private ethereumTestnetClient: Alchemy;
+export class EthereumAlchemyProvider extends AbstractEvmProviderService {
+  private chainClients: Map<string, Alchemy> = new Map();
 
   constructor(private readonly configService: ConfigService) {
     super();
+    this.initSupportedChains([
+      ChainName.ETHEREUM,
+      ChainName.ETHEREUM_GOERLI,
+      ChainName.ETHEREUM_SEPOLIA,
+      ChainName.POLYGON,
+      ChainName.POLYGON_MUMBAI,
+    ]);
     this.initializeClients();
   }
 
@@ -30,55 +61,57 @@ export class EthereumAlchemyProvider extends AbstractEthereumProviderService {
    * 初始化 Alchemy 客戶端
    */
   private initializeClients(): void {
-    // 初始化以太坊主網客戶端
-    const ethMainnetApiKey =
-      this.configService.get<string>('ALCHEMY_API_KEY_ETH_MAINNET') ||
-      this.configService.get<string>('ALCHEMY_API_KEY_ETH');
+    // 為支援的每條鏈初始化客戶端
+    for (const chainName of this.supportedChains) {
+      // 跳過沒有 Alchemy 支援的鏈
+      if (!ALCHEMY_NETWORK_MAP[chainName]) {
+        continue;
+      }
 
-    if (ethMainnetApiKey) {
-      this.ethereumMainnetClient = new Alchemy({
-        apiKey: ethMainnetApiKey,
-        network: Network.ETH_MAINNET,
-      });
+      // 獲取此鏈的 API 金鑰
+      const networkType = this.isTestnet(chainName) ? NetworkType.TESTNET : NetworkType.MAINNET;
+      const apiKey = this.getApiKey(networkType.toString(), chainName);
 
-      this.logInfo('Ethereum mainnet client initialized');
-    } else {
-      this.logWarning('Ethereum mainnet API key is not configured');
-    }
+      if (apiKey) {
+        // 為此鏈創建客戶端
+        const client = new Alchemy({
+          apiKey,
+          network: ALCHEMY_NETWORK_MAP[chainName],
+        });
 
-    // 初始化以太坊測試網客戶端 (Sepolia)
-    const ethTestnetApiKey =
-      this.configService.get<string>('ALCHEMY_API_KEY_ETH_TESTNET') ||
-      this.configService.get<string>('ALCHEMY_API_KEY_ETH');
-
-    if (ethTestnetApiKey) {
-      this.ethereumTestnetClient = new Alchemy({
-        apiKey: ethTestnetApiKey,
-        network: Network.ETH_SEPOLIA,
-      });
-
-      this.logInfo('Ethereum testnet client initialized');
-    } else {
-      this.logWarning('Ethereum testnet API key is not configured');
+        this.chainClients.set(chainName, client);
+        this.logInfo(`Initialized Alchemy client for ${chainName}`);
+      } else {
+        this.logWarning(`API key not configured for ${chainName}`);
+      }
     }
   }
 
   /**
-   * 獲取以太坊客戶端
-   * @param networkType 網絡類型
+   * 判斷鏈是否為測試網
    */
-  private getClient(networkType: NetworkType = NetworkType.MAINNET): Alchemy {
-    const isTestnet = networkType === NetworkType.TESTNET;
+  private isTestnet(chainName: ChainName): boolean {
+    return chainName.includes('_') || chainName.includes('testnet') || chainName.includes('devnet');
+  }
 
-    if (isTestnet) {
-      if (!this.ethereumTestnetClient) {
-        this.logWarning('Ethereum testnet client not initialized, falling back to mainnet client');
-        return this.ethereumMainnetClient;
-      }
-      return this.ethereumTestnetClient;
+  /**
+   * 獲取指定鏈的客戶端
+   */
+  private getClient(
+    networkType: NetworkType = NetworkType.MAINNET,
+    chainName?: ChainName,
+  ): Alchemy {
+    if (!chainName) {
+      chainName =
+        networkType === NetworkType.TESTNET ? ChainName.ETHEREUM_SEPOLIA : ChainName.ETHEREUM;
     }
 
-    return this.ethereumMainnetClient;
+    const client = this.chainClients.get(chainName);
+    if (!client) {
+      throw new Error(`No Alchemy client initialized for ${chainName}`);
+    }
+
+    return client;
   }
 
   /**
@@ -92,31 +125,45 @@ export class EthereumAlchemyProvider extends AbstractEthereumProviderService {
    * 檢查提供者是否支援
    */
   isSupported(): boolean {
-    const apiKey = this.getApiKey();
-    return !!apiKey && !!this.ethereumMainnetClient;
+    return this.chainClients.size > 0;
   }
 
   /**
    * 獲取 Alchemy API 的基礎 URL
-   * @param networkType 網絡類型
    */
-  getBaseUrl(networkType: string = NetworkType.MAINNET.toString()): string {
-    const network =
-      networkType === NetworkType.TESTNET.toString() ? 'ethereum-sepolia' : 'ethereum-mainnet';
+  getBaseUrl(networkType: string = NetworkType.MAINNET.toString(), chainName?: ChainName): string {
+    if (!chainName) {
+      chainName =
+        networkType === NetworkType.TESTNET.toString()
+          ? ChainName.ETHEREUM_SEPOLIA
+          : ChainName.ETHEREUM;
+    }
+
+    // 根據鏈名構建合適的基礎 URL
+    const network = ALCHEMY_NETWORK_MAP[chainName]?.toLowerCase() || 'ethereum-mainnet';
     return `https://${network}.g.alchemy.com/v2/`;
   }
 
   /**
    * 獲取 Alchemy API 密鑰
-   * @param networkType 網絡類型
    */
-  getApiKey(networkType: string = NetworkType.MAINNET.toString()): string {
-    const keyEnvVar =
-      networkType === NetworkType.TESTNET.toString()
-        ? 'ALCHEMY_API_KEY_ETH_TESTNET'
-        : 'ALCHEMY_API_KEY_ETH_MAINNET';
+  getApiKey(networkType: string = NetworkType.MAINNET.toString(), chainName?: ChainName): string {
+    if (!chainName) {
+      chainName =
+        networkType === NetworkType.TESTNET.toString()
+          ? ChainName.ETHEREUM_SEPOLIA
+          : ChainName.ETHEREUM;
+    }
 
-    const fallbackKeyEnvVar = 'ALCHEMY_API_KEY_ETH';
+    const prefix = ENV_PREFIX_MAP[chainName] || 'ETH';
+    const isTestnet = this.isTestnet(chainName);
+
+    // 構建環境變數名稱
+    const keyEnvVar = isTestnet
+      ? `ALCHEMY_API_KEY_${prefix}_TESTNET`
+      : `ALCHEMY_API_KEY_${prefix}_MAINNET`;
+
+    const fallbackKeyEnvVar = `ALCHEMY_API_KEY_${prefix}`;
 
     return (
       this.configService.get<string>(keyEnvVar) ||
@@ -125,30 +172,30 @@ export class EthereumAlchemyProvider extends AbstractEthereumProviderService {
   }
 
   /**
-   * 獲取地址的以太坊餘額資訊
-   * @param address 以太坊地址
-   * @param networkType 網絡類型
+   * 獲取地址的餘額資訊
    */
   async getBalances(
     address: string,
     networkType: NetworkType = NetworkType.MAINNET,
+    chainName?: ChainName,
   ): Promise<BalancesResponse> {
     try {
+      if (!chainName) {
+        chainName =
+          networkType === NetworkType.TESTNET ? ChainName.ETHEREUM_SEPOLIA : ChainName.ETHEREUM;
+      }
+
       this.logInfo(
-        `Getting balances for ${address} using Alchemy provider on ${networkType} network`,
+        `Getting balances for ${address} using Alchemy provider on ${chainName} network`,
       );
 
       // 檢查地址有效性
-      if (!this.validateEthereumAddress(address)) {
-        throw new Error(`Invalid Ethereum address: ${address}`);
+      if (!this.validateEvmAddress(address)) {
+        throw new Error(`Invalid address: ${address}`);
       }
 
-      // 獲取 Alchemy 客戶端
-      const client = this.getClient(networkType);
-
-      if (!client) {
-        throw new Error('Alchemy client not initialized');
-      }
+      // 獲取適用於此鏈的 Alchemy 客戶端
+      const client = this.getClient(networkType, chainName);
 
       // 使用 Alchemy SDK 獲取原生代幣餘額
       const nativeBalance = await client.core.getBalance(address);
@@ -222,13 +269,14 @@ export class EthereumAlchemyProvider extends AbstractEthereumProviderService {
   }
 
   /**
-   * 獲取以太坊 Gas 價格
-   * 使用 Alchemy SDK 獲取 Gas 價格資訊
-   * @param networkType 網絡類型
+   * 獲取 Gas 價格
    */
-  async getGasPrice(networkType: NetworkType = NetworkType.MAINNET): Promise<string> {
+  async getGasPrice(
+    networkType: NetworkType = NetworkType.MAINNET,
+    chainName?: ChainName,
+  ): Promise<string> {
     try {
-      const client = this.getClient(networkType);
+      const client = this.getClient(networkType, chainName);
 
       // 使用 Alchemy SDK 獲取區塊資訊，其中包含 gasPrice
       const feeData = await client.core.getFeeData();
@@ -248,9 +296,11 @@ export class EthereumAlchemyProvider extends AbstractEthereumProviderService {
 
   /**
    * 獲取詳細的 Gas 價格資訊，包括 EIP-1559 的值
-   * @param networkType 網絡類型
    */
-  async getDetailedGasPrice(networkType: NetworkType = NetworkType.MAINNET): Promise<{
+  async getDetailedGasPrice(
+    networkType: NetworkType = NetworkType.MAINNET,
+    chainName?: ChainName,
+  ): Promise<{
     gasPrice: string;
     maxFeePerGas: string;
     maxPriorityFeePerGas: string;
@@ -261,22 +311,29 @@ export class EthereumAlchemyProvider extends AbstractEthereumProviderService {
     };
   }> {
     try {
-      const client = this.getClient(networkType);
+      const client = this.getClient(networkType, chainName);
+
+      // 獲取費用數據
       const feeData = await client.core.getFeeData();
 
-      // 處理 gas price 參數，確保有正確的字符串格式
-      const gasPriceStr = feeData.gasPrice?.toString() || '0';
-      const maxFeePerGasStr = feeData.maxFeePerGas?.toString() || '0';
-      const maxPriorityFeePerGasStr = feeData.maxPriorityFeePerGas?.toString() || '0';
+      // 提取所需值
+      const gasPrice = feeData.gasPrice?.toString() || '0';
+      const maxFeePerGas = feeData.maxFeePerGas?.toString() || '0';
+      const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas?.toString() || '0';
+
+      // 格式化為 Gwei
+      const formattedGasPrice = formatUnits(gasPrice, 'gwei');
+      const formattedMaxFeePerGas = formatUnits(maxFeePerGas, 'gwei');
+      const formattedMaxPriorityFeePerGas = formatUnits(maxPriorityFeePerGas, 'gwei');
 
       return {
-        gasPrice: gasPriceStr,
-        maxFeePerGas: maxFeePerGasStr,
-        maxPriorityFeePerGas: maxPriorityFeePerGasStr,
+        gasPrice,
+        maxFeePerGas,
+        maxPriorityFeePerGas,
         formatted: {
-          gasPrice: formatUnits(gasPriceStr, 'gwei'),
-          maxFeePerGas: formatUnits(maxFeePerGasStr, 'gwei'),
-          maxPriorityFeePerGas: formatUnits(maxPriorityFeePerGasStr, 'gwei'),
+          gasPrice: formattedGasPrice,
+          maxFeePerGas: formattedMaxFeePerGas,
+          maxPriorityFeePerGas: formattedMaxPriorityFeePerGas,
         },
       };
     } catch (error) {
@@ -287,19 +344,25 @@ export class EthereumAlchemyProvider extends AbstractEthereumProviderService {
   }
 
   /**
-   * 估算交易所需 Gas 數量
-   * 使用 Alchemy SDK 進行交易估算
-   * @param txData 交易資料
-   * @param networkType 網絡類型
+   * 估算交易所需 Gas
    */
   async estimateGas(
     txData: EthereumTransactionRequest,
     networkType: NetworkType = NetworkType.MAINNET,
+    chainName?: ChainName,
   ): Promise<string> {
     try {
-      const client = this.getClient(networkType);
-      const gasEstimate = await client.core.estimateGas(txData);
-      return gasEstimate.toString();
+      const client = this.getClient(networkType, chainName);
+
+      // 使用 Alchemy SDK 估算 Gas
+      const estimatedGas = await client.core.estimateGas({
+        from: txData.from,
+        to: txData.to,
+        data: txData.data,
+        value: txData.value,
+      });
+
+      return estimatedGas.toString();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logError(`Failed to estimate gas: ${errorMessage}`);
@@ -308,21 +371,24 @@ export class EthereumAlchemyProvider extends AbstractEthereumProviderService {
   }
 
   /**
-   * 獲取以太坊 ERC20 Token 餘額
-   * 使用 Alchemy SDK 直接獲取代幣餘額
-   * @param address 錢包地址
-   * @param contractAddress 代幣合約地址
-   * @param networkType 網絡類型
+   * 獲取 ERC20 Token 餘額
    */
   async getErc20Balance(
     address: string,
     contractAddress: string,
     networkType: NetworkType = NetworkType.MAINNET,
+    chainName?: ChainName,
   ): Promise<string> {
     try {
-      const client = this.getClient(networkType);
+      const client = this.getClient(networkType, chainName);
+
+      // 獲取 ERC20 合約詳情
+      const metadata = await client.core.getTokenMetadata(contractAddress);
+
+      // 獲取 ERC20 Token 餘額
       const balance = await client.core.getTokenBalances(address, [contractAddress]);
 
+      // 如果有餘額則返回，否則返回 0
       if (balance.tokenBalances.length > 0) {
         return balance.tokenBalances[0].tokenBalance || '0';
       }
@@ -336,21 +402,21 @@ export class EthereumAlchemyProvider extends AbstractEthereumProviderService {
   }
 
   /**
-   * 獲取以太坊 ERC721 NFT 資訊
-   * 使用 Alchemy SDK 獲取完整 NFT 資訊
-   * @param address 錢包地址
-   * @param contractAddress NFT 合約地址
-   * @param networkType 網絡類型
+   * 獲取 ERC721 NFT 資訊
    */
   async getErc721Tokens(
     address: string,
     contractAddress?: string,
     networkType: NetworkType = NetworkType.MAINNET,
+    chainName?: ChainName,
   ): Promise<OwnedNft[]> {
     try {
-      const client = this.getClient(networkType);
-      const options = contractAddress ? { contractAddresses: [contractAddress] } : undefined;
-      const nfts = await client.nft.getNftsForOwner(address, options);
+      const client = this.getClient(networkType, chainName);
+
+      // 獲取 NFT，可選擇按合約過濾
+      const nfts = contractAddress
+        ? await client.nft.getNftsForOwner(address, { contractAddresses: [contractAddress] })
+        : await client.nft.getNftsForOwner(address);
 
       return nfts.ownedNfts;
     } catch (error) {
