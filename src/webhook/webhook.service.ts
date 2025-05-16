@@ -12,7 +12,12 @@ import {
   GraphqlEvent,
 } from './dto/webhook-event.dto';
 import { WebhookEvent } from '../core/db/schemas/webhook-event.schema';
-import { ChainName } from '../chains/constants';
+import {
+  ChainName,
+  NETWORK_ID_TO_CHAIN_MAP,
+  getChainId,
+  getChainIdFromNetworkId,
+} from '../chains/constants';
 import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
@@ -91,7 +96,7 @@ export class WebhookService {
         const address = activity.fromAddress; // 或 toAddress，根據需求處理
         const network = event.network;
         const chainType = this.mapNetworkToChainType(network);
-        const chainId = this.getChainIdFromNetwork(network);
+        const chainId = getChainIdFromNetworkId(network);
 
         if (!address || !chainType) {
           this.logger.warn(
@@ -212,34 +217,11 @@ export class WebhookService {
   }
 
   private mapNetworkToChainType(network: string): ChainName | null {
-    // 根據 Alchemy 網絡標識符映射到我們的鏈類型
-    switch (network) {
-      case 'ETH_MAINNET':
-        return ChainName.ETHEREUM;
-      case 'SOL_MAINNET':
-        return ChainName.SOLANA;
-      default:
-        this.logger.warn(`Unknown network type: ${network}`);
-        return null;
+    const chainName = NETWORK_ID_TO_CHAIN_MAP[network];
+    if (!chainName) {
+      this.logger.warn(`Unknown network type: ${network}`);
+      return null;
     }
-  }
-
-  private getChainIdFromNetwork(network: string): number | null {
-    // 根據網絡標識符映射到鏈ID
-    switch (network) {
-      case 'ETH_MAINNET':
-        return 1; // Ethereum Mainnet
-      case 'ETH_GOERLI':
-        return 5; // Ethereum Goerli
-      case 'ETH_SEPOLIA':
-        return 11155111; // Ethereum Sepolia
-      case 'SOL_MAINNET':
-        return 101; // Solana Mainnet
-      case 'SOL_DEVNET':
-        return 103; // Solana Devnet
-      default:
-        this.logger.warn(`Unknown network for chain ID mapping: ${network}`);
-        return null;
-    }
+    return chainName;
   }
 }

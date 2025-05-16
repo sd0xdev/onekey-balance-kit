@@ -6,6 +6,7 @@ import { NetworkType } from '../../../providers/interfaces/blockchain-provider.i
 import { ProviderType } from '../../../providers/constants/blockchain-types';
 import { ChainCode, ChainName, EVM_CHAIN_INFO_MAP } from '../../constants';
 import { Injectable } from '@nestjs/common';
+import { CHAIN_INFO_MAP } from '../../../chains/constants';
 
 /**
  * 抽象EVM鏈服務
@@ -215,14 +216,28 @@ export abstract class AbstractEvmChainService
    * 這是一個輔助方法，可被子類覆寫
    */
   protected getTestnetChainId(): number {
-    // 預設測試網映射，實際應該在子類中覆寫
-    const testnetMap: Record<ChainName, number> = {
-      [ChainName.ETHEREUM]: 11155111, // Sepolia
+    const currentChain = this.evmChain();
+
+    // 檢查當前鏈是否有對應的測試網在 CHAIN_INFO_MAP 中
+    for (const [chainKey, chainInfo] of Object.entries(CHAIN_INFO_MAP)) {
+      if (
+        !chainInfo.isMainnet && // 是測試網
+        chainInfo.mainnetRef === currentChain && // 參照的主網是當前鏈
+        chainInfo.id
+      ) {
+        // 有有效的 id
+        return chainInfo.id;
+      }
+    }
+
+    // 如果在 CHAIN_INFO_MAP 中找不到，使用預設值
+    const testnetMap: Partial<Record<ChainName, number>> = {
+      [ChainName.ETHEREUM]: CHAIN_INFO_MAP[ChainName.ETHEREUM_SEPOLIA].id, // Sepolia
       [ChainName.POLYGON]: 80001, // Mumbai
       [ChainName.BSC]: 97, // BSC Testnet
-      [ChainName.SOLANA]: 0, // 非EVM鏈，預設為0
+      [ChainName.SOLANA]: 103, // Solana Devnet
     };
 
-    return testnetMap[this.evmChain()] || 0;
+    return testnetMap[currentChain] || 0;
   }
 }

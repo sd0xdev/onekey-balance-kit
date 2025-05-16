@@ -7,7 +7,13 @@ import { CacheKeyService } from '../core/cache/cache-key.service';
 import { NotificationService } from '../notification/notification.service';
 import { WebhookEvent } from '../core/db/schemas/webhook-event.schema';
 import { WebhookEventType } from './dto/webhook-event.dto';
-import { ChainName } from '../chains/constants';
+import { ChainName, getChainIdFromNetworkId } from '../chains/constants';
+
+// 模擬 chains/constants 中的函數
+jest.mock('../chains/constants', () => ({
+  ...jest.requireActual('../chains/constants'),
+  getChainIdFromNetworkId: jest.fn(),
+}));
 
 describe('WebhookService', () => {
   let service: WebhookService;
@@ -15,6 +21,7 @@ describe('WebhookService', () => {
   let cacheKeyService: CacheKeyService;
   let notificationService: NotificationService;
   let webhookEventModel: Model<WebhookEvent>;
+  let mockGetChainIdFromNetworkId: jest.Mock;
 
   const mockCacheService = {
     // 實現所需的方法
@@ -50,6 +57,9 @@ describe('WebhookService', () => {
   beforeEach(async () => {
     // 每次測試前重置所有 mock
     jest.clearAllMocks();
+
+    // 設置 getChainIdFromNetworkId 模擬
+    mockGetChainIdFromNetworkId = getChainIdFromNetworkId as jest.Mock;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -227,8 +237,8 @@ describe('WebhookService', () => {
       // 模擬 mapNetworkToChainType 方法，讓它返回 ETHEREUM
       jest.spyOn(service as any, 'mapNetworkToChainType').mockReturnValue(ChainName.ETHEREUM);
 
-      // 模擬 getChainIdFromNetwork 方法，讓它返回 Sepolia 鏈 ID
-      jest.spyOn(service as any, 'getChainIdFromNetwork').mockReturnValue(11155111);
+      // 模擬 getChainIdFromNetworkId 函數
+      mockGetChainIdFromNetworkId.mockReturnValue(11155111);
 
       await service['handleAddressActivity'](mockPayload);
 
@@ -270,7 +280,7 @@ describe('WebhookService', () => {
       };
 
       jest.spyOn(service as any, 'mapNetworkToChainType').mockReturnValue(ChainName.ETHEREUM);
-      jest.spyOn(service as any, 'getChainIdFromNetwork').mockReturnValue(null);
+      mockGetChainIdFromNetworkId.mockReturnValue(null);
 
       await service['handleAddressActivity'](mockPayload);
 
@@ -438,17 +448,20 @@ describe('WebhookService', () => {
     });
   });
 
-  describe('getChainIdFromNetwork', () => {
+  describe('getChainIdFromNetworkId', () => {
     it('should return correct chain ID for ETH_MAINNET', () => {
-      expect(service['getChainIdFromNetwork']('ETH_MAINNET')).toBe(1);
+      mockGetChainIdFromNetworkId.mockReturnValue(1);
+      expect(getChainIdFromNetworkId('ETH_MAINNET')).toBe(1);
     });
 
     it('should return correct chain ID for ETH_SEPOLIA', () => {
-      expect(service['getChainIdFromNetwork']('ETH_SEPOLIA')).toBe(11155111);
+      mockGetChainIdFromNetworkId.mockReturnValue(11155111);
+      expect(getChainIdFromNetworkId('ETH_SEPOLIA')).toBe(11155111);
     });
 
     it('should return null for unknown networks', () => {
-      expect(service['getChainIdFromNetwork']('UNKNOWN_NETWORK')).toBeNull();
+      mockGetChainIdFromNetworkId.mockReturnValue(null);
+      expect(getChainIdFromNetworkId('UNKNOWN_NETWORK')).toBeNull();
     });
   });
 });
