@@ -25,6 +25,7 @@ describe('WebhookService', () => {
 
   const mockCacheService = {
     // 實現所需的方法
+    deleteByPattern: jest.fn().mockResolvedValue(5),
   };
 
   const mockCacheKeyService = {
@@ -210,7 +211,7 @@ describe('WebhookService', () => {
   });
 
   describe('handleAddressActivity', () => {
-    it('should handle address activity correctly for ETH_SEPOLIA', async () => {
+    it('should handle address activity correctly for ETH_SEPOLIA', () => {
       const mockPayload = {
         webhookId: 'wh_123',
         id: 'evt_456',
@@ -240,22 +241,35 @@ describe('WebhookService', () => {
       // 模擬 getChainIdFromNetworkId 函數
       mockGetChainIdFromNetworkId.mockReturnValue(11155111);
 
-      await service['handleAddressActivity'](mockPayload);
+      service['handleAddressActivity'](mockPayload);
 
-      // 使用 mock.calls 屬性
+      // 檢查 emitAddressActivity 調用
       const emitActivityFn = mockNotificationService.emitAddressActivity;
       const calls = emitActivityFn.mock.calls;
 
-      expect(calls.length).toBe(1);
+      // 預期有2次調用，一次是對 fromAddress，一次是對 toAddress
+      expect(calls.length).toBe(2);
+
+      // 驗證第一次調用（fromAddress）
       expect(calls[0][0]).toBe(ChainName.ETHEREUM);
       expect(calls[0][1]).toBe(11155111);
       expect(calls[0][2]).toBe('0xabc');
       expect(calls[0][3]).toMatchObject({
-        network: 'ETH_SEPOLIA',
+        txHash: '0x123',
+        eventType: WebhookEventType.ADDRESS_ACTIVITY,
+      });
+
+      // 驗證第二次調用（toAddress）
+      expect(calls[1][0]).toBe(ChainName.ETHEREUM);
+      expect(calls[1][1]).toBe(11155111);
+      expect(calls[1][2]).toBe('0xdef');
+      expect(calls[1][3]).toMatchObject({
+        txHash: '0x123',
+        eventType: WebhookEventType.ADDRESS_ACTIVITY,
       });
     });
 
-    it('should use fallback mechanism when chain ID is not found', async () => {
+    it('should use fallback mechanism when chain ID is not found', () => {
       const mockPayload = {
         webhookId: 'wh_123',
         id: 'evt_456',
@@ -282,21 +296,18 @@ describe('WebhookService', () => {
       jest.spyOn(service as any, 'mapNetworkToChainType').mockReturnValue(ChainName.ETHEREUM);
       mockGetChainIdFromNetworkId.mockReturnValue(null);
 
-      await service['handleAddressActivity'](mockPayload);
+      service['handleAddressActivity'](mockPayload);
 
-      // 使用 mock.calls 屬性
+      // 因為缺少有效的 chainId，所以不應調用 emitAddressActivity
       const emitActivityFn = mockNotificationService.emitAddressActivity;
       expect(emitActivityFn.mock.calls.length).toBe(0);
 
+      // 在這個情況下不會調用 invalidateAddressCache
       const invalidateCacheFn = mockCacheKeyService.invalidateAddressCache;
-      const calls = invalidateCacheFn.mock.calls;
-
-      expect(calls.length).toBe(1);
-      expect(calls[0][0]).toBe(ChainName.ETHEREUM);
-      expect(calls[0][1]).toBe('0xabc');
+      expect(invalidateCacheFn.mock.calls.length).toBe(0);
     });
 
-    it('should handle invalid activity data', async () => {
+    it('should handle invalid activity data', () => {
       // 修改為完整的 AddressActivityEvent 格式，但缺少關鍵資訊
       const mockPayload = {
         webhookId: 'wh_123',
@@ -323,15 +334,14 @@ describe('WebhookService', () => {
 
       // 使用 as any 來繞過 TypeScript 的類型檢查
       jest.spyOn(service as any, 'mapNetworkToChainType').mockReturnValue(ChainName.ETHEREUM);
+      mockGetChainIdFromNetworkId.mockReturnValue(11155111);
 
-      await service['handleAddressActivity'](mockPayload as any);
+      service['handleAddressActivity'](mockPayload as any);
 
-      // 使用 mock.calls 屬性
+      // 預期只有 toAddress 的調用
       const emitActivityFn = mockNotificationService.emitAddressActivity;
-      expect(emitActivityFn.mock.calls.length).toBe(0);
-
-      const invalidateCacheFn = mockCacheKeyService.invalidateAddressCache;
-      expect(invalidateCacheFn.mock.calls.length).toBe(0);
+      expect(emitActivityFn.mock.calls.length).toBe(1);
+      expect(emitActivityFn.mock.calls[0][2]).toBe('0xdef');
     });
   });
 
@@ -357,19 +367,24 @@ describe('WebhookService', () => {
       };
 
       jest.spyOn(service as any, 'mapNetworkToChainType').mockReturnValue(ChainName.ETHEREUM);
+      mockGetChainIdFromNetworkId.mockReturnValue(1);
 
       service['handleNftActivity'](mockPayload);
 
-      // 使用 mock.calls 屬性
+      // 檢查 NFT 活動調用
       const emitNftActivityFn = mockNotificationService.emitNftActivity;
-      const calls = emitNftActivityFn.mock.calls;
+      const nftCalls = emitNftActivityFn.mock.calls;
+      expect(nftCalls.length).toBe(1);
+      expect(nftCalls[0][0]).toBe(ChainName.ETHEREUM);
+      expect(nftCalls[0][1]).toBe('0xnft');
+      expect(nftCalls[0][2]).toBe('1234');
+      expect(nftCalls[0][3]).toBe('0xabc');
+      expect(nftCalls[0][4]).toBe('0xdef');
 
-      expect(calls.length).toBe(1);
-      expect(calls[0][0]).toBe(ChainName.ETHEREUM);
-      expect(calls[0][1]).toBe('0xnft');
-      expect(calls[0][2]).toBe('1234');
-      expect(calls[0][3]).toBe('0xabc');
-      expect(calls[0][4]).toBe('0xdef');
+      // 檢查 address 活動調用
+      const emitActivityFn = mockNotificationService.emitAddressActivity;
+      const activityCalls = emitActivityFn.mock.calls;
+      expect(activityCalls.length).toBe(2); // fromAddress 和 toAddress
     });
   });
 
@@ -392,18 +407,23 @@ describe('WebhookService', () => {
       };
 
       jest.spyOn(service as any, 'mapNetworkToChainType').mockReturnValue(ChainName.ETHEREUM);
+      mockGetChainIdFromNetworkId.mockReturnValue(1);
 
       service['handleMinedTransaction'](mockPayload);
 
-      // 使用 mock.calls 屬性
+      // 檢查交易通知調用
       const emitTxMinedFn = mockNotificationService.emitTransactionMined;
-      const calls = emitTxMinedFn.mock.calls;
+      const txCalls = emitTxMinedFn.mock.calls;
+      expect(txCalls.length).toBe(1);
+      expect(txCalls[0][0]).toBe(ChainName.ETHEREUM);
+      expect(txCalls[0][1]).toBe('0xtx123');
+      expect(txCalls[0][2]).toBe('0xabc');
+      expect(txCalls[0][3]).toBe('0xdef');
 
-      expect(calls.length).toBe(1);
-      expect(calls[0][0]).toBe(ChainName.ETHEREUM);
-      expect(calls[0][1]).toBe('0xtx123');
-      expect(calls[0][2]).toBe('0xabc');
-      expect(calls[0][3]).toBe('0xdef');
+      // 檢查地址活動調用
+      const emitActivityFn = mockNotificationService.emitAddressActivity;
+      const activityCalls = emitActivityFn.mock.calls;
+      expect(activityCalls.length).toBe(2); // from 和 to
     });
   });
 

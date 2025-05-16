@@ -1,3 +1,5 @@
+import { ConnectOptions } from 'mongoose';
+
 export interface AppConfig {
   env: string;
   port: number;
@@ -12,7 +14,7 @@ export interface DatabaseConfig {
   database: string;
 }
 
-export interface MongoConfig {
+export interface MongoConfig extends Partial<ConnectOptions> {
   url?: string;
   host: string;
   port: number;

@@ -3,211 +3,196 @@ description: 快取策略
 globs:
 alwaysApply: false
 ---
-# 多層快取策略
-
-OneKeyBalanceKit 實現了三層快取策略，用於優化區塊鏈資產餘額查詢性能：
-
-## 快取層次
-
-1. Cloudflare Edge 快取（最外層）
-2. Redis 快取（中間層）
-3. MongoDB 持久化存儲（最內層）
-
-## 實現細節
-
-[CacheService](mdc:src/core/cache/cache.service.ts) 是主要的快取服務實現，該服務：
-
-- 使用 NestJS 的 `@nestjs/cache-manager` 集成
-- 支持可降級的快取策略（Redis 失敗時降級為內存快取）
-- 提供通用的快取接口：get、set、delete、reset
-
-## Webhook 驅動的快取失效
-
-系統使用 Webhook 事件通知來主動使快取失效：
-
-- [WebhookService](mdc:src/webhook/webhook.service.ts) 處理鏈上事件通知
-- 當地址活動事件到達時，相關地址的快取會被清除
-- 使用簽名驗證確保 Webhook 請求的真實性
-
-## 快取鍵策略
-
-快取鍵格式為：`portfolio:{chainType}:{address}`，例如：
-- `portfolio:eth:0x1234...` （以太坊地址）
-- `portfolio:sol:ABC123...` （Solana 地址）
-
-## 錯誤處理
-
-- 快取錯誤不會導致應用程序失敗
-- 快取服務捕獲並記錄所有可能的錯誤
-- 提供優雅的降級機制
-
 # 快取策略
 
-本專案使用 cache-manager v6 結合 Keyv 架構實現可靠的快取系統，支援 Redis 和記憶體快取模式。
+本專案採用三層式快取架構，確保性能和數據一致性。
+
+## 快取層級
+
+1. **邊緣快取 (Edge Cache)** - 可選的前端或邊緣快取
+2. **Redis 快取** - 主要快取層，存儲格式化後的 `BalanceResponse` 數據
+3. **MongoDB 持久層** - 使用 `PortfolioSnapshot` 模型存儲數據，具有 TTL 功能
+
+## 數據格式轉換
+
+- MongoDB 中使用 `PortfolioSnapshot` 格式存儲
+- 當返回給客戶端時，會轉換為 `BalanceResponse` 格式
+- [src/core/cache/cache-mongo.service.ts](mdc:src/core/cache/cache-mongo.service.ts) 負責在查詢時進行格式轉換
+
+## 過期機制
+
+### MongoDB TTL
+
+- `PortfolioSnapshot` 模型包含 `expiresAt` 字段，默認 30 分鐘後過期
+- MongoDB TTL 索引會自動刪除過期記錄
+- 查詢時只返回未過期的記錄
+- 所有新記錄都必須有過期時間，並通過驗證確保過期時間在當前時間之後
+
+```typescript
+@Prop({
+  type: Date,
+  required: true,
+  default: function () {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + 30); // 預設 30 分鐘後過期
+    return now;
+  },
+  validate: {
+    validator: function (v: Date) {
+      return v > new Date(); // 確保過期時間在當前時間之後
+    },
+    message: '過期時間必須在當前時間之後',
+  },
+})
+expiresAt: Date;
+```
+
+### Redis TTL
+
+- Redis 快取通常設置單獨的 TTL
+- 可以在 API 調用時通過 `ttlSeconds` 參數自定義
+
+## 快取失效
+
+通過事件機制處理快取失效：
+
+1. 當 webhook 事件到達時，發送 `ADDRESS_ACTIVITY` 通知事件
+2. `CacheMongoService` 監聽這些事件並執行：
+   - 使用 `CacheKeyService` 清除 Redis 快取
+   - 使用 `DbService.invalidateAddressSnapshot()` 設置 MongoDB 記錄的 `expiresAt` 為當前時間
+
+通過這種機制，確保了當數據變更時，快取能夠及時失效，同時避免了循環依賴問題。
 
 ## 架構概述
 
-- 核心架構基於 NestJS 的 `@nestjs/cache-manager`
-- 使用 `@keyv/redis` 作為 Redis 介面
-- 支援自動降級到記憶體快取（當 Redis 不可用時）
-- 實現優化的模式刪除和快取失效策略
+系統採用三層數據架構設計：
+1. **Edge Cache** - API層面的緩存，最快速的訪問
+2. **Redis** - 中間層緩存，跨服務共享資料
+3. **MongoDB** - 持久化存儲，支援歷史記錄和複雜查詢
 
-## 關鍵文件
+## 核心服務
 
-- [src/core/cache/cache.module.ts](mdc:src/core/cache/cache.module.ts) - 快取模組配置
-- [src/core/cache/cache.service.ts](mdc:src/core/cache/cache.service.ts) - 快取服務實現
-- [src/core/cache/cache-key.service.ts](mdc:src/core/cache/cache-key.service.ts) - 快取鍵管理
+- [CacheService](mdc:src/core/cache/cache.service.ts) - 提供通用緩存操作，支援Redis和記憶體模式
+- [CacheKeyService](mdc:src/core/cache/cache-key.service.ts) - 管理統一的緩存鍵生成與解析
+- [CacheMongoService](mdc:src/core/cache/cache-mongo.service.ts) - 負責Redis緩存與MongoDB數據的同步
+- [NotificationService](mdc:src/notification/notification.service.ts) - 事件發布系統，用於解耦緩存操作和MongoDB同步
+- [PortfolioMongoListener](mdc:src/core/portfolio/portfolio-mongo.listener.ts) - 監聽投資組合更新事件，負責MongoDB同步
 
-## 重要考量
+## 事件驅動的緩存同步
 
-### Redis 客戶端獲取
+系統使用事件驅動架構實現緩存與資料庫操作的解耦：
+1. 資料更新時，先更新Redis緩存
+2. 然後觸發事件（如`PORTFOLIO_UPDATE`）
+3. 專門的監聽器（如`PortfolioMongoListener`）接收事件並更新MongoDB
 
-在 cache-manager v6 + Keyv 架構中，Redis 客戶端的位置不固定，需要使用多路徑檢測：
-
-```typescript
-// 使用多路徑檢測 Redis 客戶端
-const storeAny = store as any;
-const redisClient =
-  storeAny?.opts?.store?._redis ||
-  storeAny?._store?._redis ||
-  storeAny?.opts?.store?._client ||
-  storeAny?._store?._client ||
-  storeAny?.opts?.store?.client ||
-  storeAny?._store?.client;
+```mermaid
+graph LR
+    A[API請求] --> B[CacheMongoService]
+    B --> C[Redis更新]
+    B --> D[觸發事件]
+    D --> E[PortfolioMongoListener]
+    E --> F[MongoDB更新]
 ```
 
-為避免訪問私有屬性的 TypeScript 錯誤，可使用 `any` 類型斷言並配合 try-catch 處理：
+## 統一緩存鍵結構
 
-```typescript
-try {
-  // 嘗試獲取 Redis 客戶端
-  const redisClient = /* 多路徑檢測代碼 */
-  return redisClient;
-} catch (e) {
-  // 處理可能的錯誤
-  return null;
-}
+系統使用統一的緩存鍵結構，格式為：
+```
+prefix:chain:chainId:address:provider:extra
 ```
 
-### TTL 處理
+示例：`portfolio:ethereum:1:0x1234:alchemy`
 
-注意 TTL 單位轉換：
-- 在 `cache.service.ts` 中，API 接受秒為單位的 TTL
-- 在設置快取時需轉換為毫秒：`await this.cacheManager.set(key, value, ttlSeconds * 1000);`
-- 在配置 Memory 快取時也使用毫秒：`new Keyv({ ttl: 5 * 60 * 1000 })`
+## MongoDB模型設計
 
-### 錯誤處理和重連
+主要MongoDB集合：
+- [PortfolioSnapshot](mdc:src/core/db/schemas/portfolio-snapshot.schema.ts) - 儲存最新餘額快照
+- [PortfolioHistory](mdc:src/core/db/schemas/portfolio-history.schema.ts) - 時間序列集合，記錄歷史變化
+- [TxHistory](mdc:src/core/db/schemas/tx-history.schema.ts) - 交易歷史記錄
+- [NftOwner](mdc:src/core/db/schemas/nft-owner.schema.ts) - NFT所有權記錄
+- [NftMeta](mdc:src/core/db/schemas/nft-meta.schema.ts) - NFT元數據存儲
+- [PriceCache](mdc:src/core/db/schemas/price-cache.schema.ts) - 幣價緩存
 
-實現了完整的錯誤處理和自動重連機制：
-- 監聽 Redis 錯誤事件
-- 自動嘗試重連
-- 連接狀態監控
-- 降級到記憶體快取
+## TTL與索引策略
 
-### 模式刪除策略
-
-使用 SCAN + UNLINK 非阻塞方式刪除符合模式的快取：
-```typescript
-// 批量刪除
-const { cursor: next, keys } = await redis.scan(cursor, {
-  MATCH: pattern,
-  COUNT: 100,
-});
-if (keys.length) {
-  await redis.unlink(keys); // 非阻塞刪除
-}
-```
-
-### TypeScript 類型處理
-
-在處理第三方庫自定義屬性時，使用類型斷言避免編譯錯誤：
-```typescript
-// 使用類型斷言處理 Keyv 內部結構
-const redisClient = (store as any)?.opts?.store?._redis;
-```
-
-## 使用方法
-
-1. **注入快取服務**：
-   ```typescript
-   constructor(private readonly cacheService: CacheService) {}
-   ```
-
-2. **快取操作**：
-   ```typescript
-   // 存儲資料（帶 TTL）
-   await this.cacheService.set('your-key', data, 3600); // TTL 為 3600 秒
-
-   // 讀取資料
-   const data = await this.cacheService.get<YourType>('your-key');
-
-   // 刪除快取
-   await this.cacheService.delete('your-key');
-
-   // 批次刪除（Redis 模式）
-   await this.cacheService.deleteByPattern('prefix:*');
-   ```
-
-3. **檢查快取類型與連接狀態**：
-   ```typescript
-   const cacheType = this.cacheService.getCacheType(); // 'Redis' 或 'Memory'
-   const isConnected = await this.cacheService.isRedisConnected(); // Redis 連接狀態
-   ```
-
-## 快取鍵策略
-
-快取鍵格式為：`{prefix}:{chainType}:{chainId}:{address}`，例如：
-- `portfolio:eth:1:0x1234...` （以太坊主網地址）
-- `portfolio:sol:101:ABC123...` （Solana 地址）
-
-[CacheKeyService](mdc:src/core/cache/cache-key.service.ts) 提供了創建與解析快取鍵的統一接口。
+- Redis緩存默認過期時間為30分鐘（可配置）
+- MongoDB使用TTL索引，30天無更新自動刪除記錄
+- 所有集合使用相同的主要索引字段(chainId, address, provider)以保持與Redis鍵一致
+- PortfolioHistory使用MongoDB的時間序列集合功能，支援高效時間範圍查詢
 
 ## 最佳實踐
 
-1. 在進行快取操作前檢查 Redis 連接狀態
-2. 對大量數據的快取使用適當的 TTL
-3. 使用模式刪除批量無效化相關快取
-4. 使用 `setTimeout` 搭配 `void` 操作符處理異步函數的返回值
-5. 避免在事件處理器中直接使用 async 函數
-6. 在關鍵更新後主動使相關快取失效
-7. 使用多路徑檢測和 try-catch 處理提高 Redis 客戶端獲取的可靠性
+1. **使用NotificationService觸發事件**，而不是直接調用數據操作
+2. **Global模塊設計**：NotificationModule和CacheModule均設為全局模塊，避免循環依賴
+3. **分離關注點**：緩存操作與MongoDB同步解耦，提高系統擴展性和可維護性
+4. **一致性考慮**：清除緩存時同時觸發地址活動事件，確保各系統組件資料一致性
 
-## 快取過期策略
+## 緩存策略使用範例
 
-不同類型的數據適用不同的快取過期時間：
-
-| 數據類型 | 建議過期時間 | 說明 |
-|---------|------------|------|
-| 餘額數據 | 1-5 分鐘   | 餘額可能頻繁變化 |
-| 交易歷史 | 30 分鐘    | 歷史交易不會變更，但新交易會產生 |
-| 代幣價格 | 1-10 分鐘  | 根據市場波動性調整 |
-| NFT 元數據 | 1 小時    | 元數據較少變更 |
-
-## Webhook 驅動的快取失效
-
-系統使用 Webhook 事件通知來主動使快取失效：
-
-- [WebhookService](mdc:src/webhook/webhook.service.ts) 處理鏈上事件通知
-- 當地址活動事件到達時，相關地址的快取會被清除
-- 使用簽名驗證確保 Webhook 請求的真實性
+### 讀取資料流程
 
 ```typescript
-// 使快取失效示例
-async function handleTransferEvent(event: TransferEvent): Promise<void> {
-  // 主動使相關快取失效
-  await this.cacheKeyService.invalidateChainAddressCache(
-    event.chain,
-    event.chainId,
-    event.address
+// 使用CacheMongoService獲取數據（優先Redis，再MongoDB）
+const data = await cacheMongoService.getPortfolioData(
+  chain,
+  chainId,
+  address,
+  provider,
+);
+
+// 如果沒有緩存數據，從區塊鏈獲取
+if (!data) {
+  const blockchainData = await chainService.getBalances(address);
+
+  // 更新到緩存和MongoDB
+  await cacheMongoService.syncPortfolioData(
+    chain,
+    chainId,
+    address,
+    blockchainData,
+    provider,
+    30 * 60
   );
 
-  this.logger.log(`Invalidated cache for ${event.chain}:${event.chainId}:${event.address}`);
+  return blockchainData;
 }
+
+return data;
 ```
 
-## 快取優化技巧
+### 更新資料流程
 
-1. **分層快取**：熱門數據使用更快的記憶體快取
-2. **背景刷新**：在快取即將過期前異步刷新
-3. **條件快取**：對不同用戶、不同場景使用不同快取策略
-4. **快取壓縮**：大量數據使用壓縮算法節省記憶體
+```typescript
+// 1. 更新Redis緩存
+await cacheService.set(cacheKey, portfolioData, ttlSeconds);
+
+// 2. 觸發事件，解耦MongoDB同步操作
+notificationService.emitPortfolioUpdate(
+  chain,
+  chainId,
+  address,
+  portfolioData,
+  provider,
+  ttlSeconds
+);
+```
+
+### 失效緩存流程
+
+```typescript
+// 1. 刪除Redis緩存
+const deletedCount = await cacheService.deleteByPattern(pattern);
+
+// 2. 發送地址活動事件，用於通知其他服務
+notificationService.emitAddressActivity(chain, chainId, address, {
+  action: 'cache_invalidated',
+  timestamp: new Date(),
+});
+```
+
+## 錯誤處理和重連
+
+系統實現了完整的錯誤處理和自動重連機制：
+- 監聽Redis錯誤事件，自動嘗試重連
+- MongoDB操作錯誤不影響Redis緩存操作
+- 事件處理器獨立捕獲異常，避免事件傳播中斷
