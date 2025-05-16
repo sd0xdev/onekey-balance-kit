@@ -1,11 +1,4 @@
-/**
- * 支援的區塊鏈類型
- */
-export enum BlockchainType {
-  ETHEREUM = 'ethereum',
-  SOLANA = 'solana',
-  BITCOIN = 'bitcoin',
-}
+import { ChainName } from '../../chains/constants';
 
 /**
  * 支援的提供者類型
@@ -19,19 +12,24 @@ export enum ProviderType {
 }
 
 /**
- * 區塊鏈符號到類型的映射
+ * 區塊鏈類型到默認提供者的映射
  */
-export const SYMBOL_TO_BLOCKCHAIN_MAP: Record<string, BlockchainType> = {
-  eth: BlockchainType.ETHEREUM,
-  sol: BlockchainType.SOLANA,
-  btc: BlockchainType.BITCOIN,
+export const CHAIN_TO_DEFAULT_PROVIDER_MAP: Partial<Record<ChainName, ProviderType>> = {
+  // 主網
+  [ChainName.ETHEREUM]: ProviderType.ALCHEMY,
+  [ChainName.SOLANA]: ProviderType.ALCHEMY,
+  [ChainName.POLYGON]: ProviderType.ALCHEMY,
+  [ChainName.BSC]: ProviderType.ALCHEMY,
+
+  // 測試網
+  [ChainName.ETHEREUM_GOERLI]: ProviderType.ALCHEMY,
+  [ChainName.ETHEREUM_SEPOLIA]: ProviderType.ALCHEMY,
+  [ChainName.SOLANA_DEVNET]: ProviderType.ALCHEMY,
 };
 
 /**
- * 區塊鏈類型到默認提供者的映射
+ * 獲取指定鏈的默認提供者
  */
-export const BLOCKCHAIN_TO_DEFAULT_PROVIDER_MAP: Record<BlockchainType, ProviderType> = {
-  [BlockchainType.ETHEREUM]: ProviderType.ALCHEMY,
-  [BlockchainType.SOLANA]: ProviderType.ALCHEMY,
-  [BlockchainType.BITCOIN]: ProviderType.ALCHEMY,
-};
+export function getDefaultProviderForChain(chainName: ChainName): ProviderType {
+  return CHAIN_TO_DEFAULT_PROVIDER_MAP[chainName] || ProviderType.ALCHEMY;
+}

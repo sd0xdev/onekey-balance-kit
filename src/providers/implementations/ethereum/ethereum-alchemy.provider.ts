@@ -4,15 +4,16 @@ import { Alchemy, Network, TokenBalanceType, OwnedNft } from 'alchemy-sdk';
 import { AbstractEthereumProviderService } from '../../abstract/abstract-ethereum-provider.service';
 import { BalancesResponse, NetworkType } from '../../interfaces/blockchain-provider.interface';
 import { EthereumTransactionRequest } from '../../interfaces/ethereum-provider.interface';
-import { BlockchainType, ProviderType } from '../../constants/blockchain-types';
+import { ProviderType } from '../../constants/blockchain-types';
 import { Provider } from '../../decorators/provider.decorator';
 import { formatUnits } from 'ethers';
+import { ChainName } from '../../../chains/constants';
 
 /**
  * Alchemy 以太坊提供者實現
  */
 @Provider({
-  blockchainType: BlockchainType.ETHEREUM,
+  blockchainType: ChainName.ETHEREUM,
   providerType: ProviderType.ALCHEMY,
 })
 @Injectable()

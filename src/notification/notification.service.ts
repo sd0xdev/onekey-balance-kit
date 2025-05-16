@@ -1,0 +1,193 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
+import { CacheKeyService } from '../core/cache/cache-key.service';
+import { ChainName } from '../chains/constants';
+
+// 事件類型枚舉
+export enum NotificationEventType {
+  ADDRESS_ACTIVITY = 'address.activity',
+  TOKEN_ACTIVITY = 'token.activity',
+  NFT_ACTIVITY = 'nft.activity',
+  TRANSACTION_MINED = 'transaction.mined',
+  TRANSACTION_DROPPED = 'transaction.dropped',
+  CUSTOM_EVENT = 'custom.event',
+}
+
+// 通知事件基類
+export class NotificationEvent {
+  constructor(
+    public readonly type: NotificationEventType,
+    public readonly timestamp: Date = new Date(),
+  ) {}
+}
+
+// 地址活動事件
+export class AddressActivityEvent extends NotificationEvent {
+  constructor(
+    public readonly chain: ChainName,
+    public readonly chainId: number,
+    public readonly address: string,
+    public readonly metadata?: Record<string, any>,
+  ) {
+    super(NotificationEventType.ADDRESS_ACTIVITY);
+  }
+}
+
+// NFT 活動事件
+export class NftActivityEvent extends NotificationEvent {
+  constructor(
+    public readonly chain: ChainName,
+    public readonly contractAddress: string,
+    public readonly tokenId: string,
+    public readonly fromAddress: string,
+    public readonly toAddress: string,
+  ) {
+    super(NotificationEventType.NFT_ACTIVITY);
+  }
+}
+
+// 交易確認事件
+export class TransactionMinedEvent extends NotificationEvent {
+  constructor(
+    public readonly chain: ChainName,
+    public readonly txHash: string,
+    public readonly fromAddress: string,
+    public readonly toAddress: string,
+  ) {
+    super(NotificationEventType.TRANSACTION_MINED);
+  }
+}
+
+// 自定義事件
+export class CustomEvent extends NotificationEvent {
+  constructor(public readonly data: Record<string, any>) {
+    super(NotificationEventType.CUSTOM_EVENT);
+  }
+}
+
+@Injectable()
+export class NotificationService {
+  private readonly logger = new Logger(NotificationService.name);
+
+  constructor(
+    private readonly eventEmitter: EventEmitter2,
+    private readonly cacheKeyService: CacheKeyService,
+  ) {}
+
+  // 發送地址活動事件
+  emitAddressActivity(
+    chain: ChainName,
+    chainId: number,
+    address: string,
+    metadata?: Record<string, any>,
+  ): void {
+    const event = new AddressActivityEvent(chain, chainId, address, metadata);
+    this.logger.debug(`Emitting address activity event: ${chain}:${chainId}:${address}`);
+    this.eventEmitter.emit(NotificationEventType.ADDRESS_ACTIVITY, event);
+  }
+
+  // 發送 NFT 活動事件
+  emitNftActivity(
+    chain: ChainName,
+    contractAddress: string,
+    tokenId: string,
+    fromAddress: string,
+    toAddress: string,
+  ): void {
+    const event = new NftActivityEvent(chain, contractAddress, tokenId, fromAddress, toAddress);
+    this.logger.debug(`Emitting NFT activity event: ${chain}:${contractAddress}:${tokenId}`);
+    this.eventEmitter.emit(NotificationEventType.NFT_ACTIVITY, event);
+  }
+
+  // 發送交易確認事件
+  emitTransactionMined(
+    chain: ChainName,
+    txHash: string,
+    fromAddress: string,
+    toAddress: string,
+  ): void {
+    const event = new TransactionMinedEvent(chain, txHash, fromAddress, toAddress);
+    this.logger.debug(`Emitting transaction mined event: ${chain}:${txHash}`);
+    this.eventEmitter.emit(NotificationEventType.TRANSACTION_MINED, event);
+  }
+
+  // 發送自定義事件
+  emitCustomEvent(data: Record<string, any>): void {
+    const event = new CustomEvent(data);
+    this.logger.debug(`Emitting custom event with data: ${JSON.stringify(data)}`);
+    this.eventEmitter.emit(NotificationEventType.CUSTOM_EVENT, event);
+  }
+
+  // 監聽地址活動事件並處理
+  @OnEvent(NotificationEventType.ADDRESS_ACTIVITY)
+  async handleAddressActivity(event: AddressActivityEvent): Promise<void> {
+    try {
+      this.logger.debug(
+        `Handling address activity: ${event.chain}:${event.chainId}:${event.address}`,
+      );
+
+      // 執行緩存清理
+      const deletedCount = await this.cacheKeyService.invalidateChainAddressCache(
+        event.chain,
+        event.chainId,
+        event.address,
+      );
+
+      this.logger.debug(
+        `Invalidated ${deletedCount} cache entries for ${event.chain}:${event.chainId}:${event.address}`,
+      );
+
+      // 這裡可以添加其他處理邏輯，例如：
+      // - 發送推送通知
+      // - 更新資料庫狀態
+      // - 觸發 WebSocket 事件
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Failed to handle address activity: ${errorMessage}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+  }
+
+  // 監聽 NFT 活動事件並處理
+  @OnEvent(NotificationEventType.NFT_ACTIVITY)
+  handleNftActivity(event: NftActivityEvent): void {
+    try {
+      this.logger.debug(
+        `Handling NFT activity: ${event.chain}:${event.contractAddress}:${event.tokenId}`,
+      );
+
+      // NFT 活動處理邏輯
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to handle NFT activity: ${errorMessage}`);
+    }
+  }
+
+  // 監聽交易確認事件並處理
+  @OnEvent(NotificationEventType.TRANSACTION_MINED)
+  handleTransactionMined(event: TransactionMinedEvent): void {
+    try {
+      this.logger.debug(`Handling transaction mined: ${event.chain}:${event.txHash}`);
+
+      // 交易確認處理邏輯
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to handle transaction mined: ${errorMessage}`);
+    }
+  }
+
+  // 監聽自定義事件並處理
+  @OnEvent(NotificationEventType.CUSTOM_EVENT)
+  handleCustomEvent(event: CustomEvent): void {
+    try {
+      this.logger.debug(`Handling custom event: ${JSON.stringify(event.data)}`);
+
+      // 自定義事件處理邏輯
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to handle custom event: ${errorMessage}`);
+    }
+  }
+}

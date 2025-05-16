@@ -1,13 +1,14 @@
 import { Type } from '@nestjs/common';
 import { BlockchainProviderInterface } from '../interfaces/blockchain-provider.interface';
-import { BlockchainType, ProviderType } from './blockchain-types';
+import { ChainName } from '../../chains/constants';
+import { ProviderType } from './blockchain-types';
 
 /**
  * 提供者註冊介面
  */
 export interface ProviderRegistration {
   providerType: ProviderType;
-  blockchainType: BlockchainType;
+  blockchainType: ChainName;
   providerClass: Type<BlockchainProviderInterface>;
 }
 
@@ -16,7 +17,7 @@ export interface ProviderRegistration {
  */
 export class ProviderDescriptor {
   constructor(
-    public readonly blockchainType: BlockchainType,
+    public readonly blockchainType: ChainName,
     public readonly providerType: ProviderType,
   ) {}
 
@@ -25,7 +26,7 @@ export class ProviderDescriptor {
   }
 
   static fromString(descriptor: string): ProviderDescriptor {
-    const [blockchainType, providerType] = descriptor.split(':') as [BlockchainType, ProviderType];
+    const [blockchainType, providerType] = descriptor.split(':') as [ChainName, ProviderType];
     return new ProviderDescriptor(blockchainType, providerType);
   }
 }

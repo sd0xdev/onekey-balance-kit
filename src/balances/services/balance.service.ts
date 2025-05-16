@@ -1,5 +1,6 @@
 import { Injectable, Logger, Inject, Optional, Scope } from '@nestjs/common';
 import { CacheService } from '../../core/cache/cache.service';
+import { CacheKeyService } from '../../core/cache/cache-key.service';
 import { ChainName, COIN_SYMBOL_TO_CHAIN_MAP } from '../../chains/constants';
 import { ErrorCode } from '../../common/constants/error-codes';
 import {
@@ -18,6 +19,7 @@ export class BalanceService {
 
   constructor(
     private readonly cacheService: CacheService,
+    private readonly cacheKeyService: CacheKeyService,
     private readonly chainServiceFactory: ChainServiceFactory,
     @Optional() @Inject(REQUEST) private readonly request: Request,
   ) {}
@@ -68,10 +70,8 @@ export class BalanceService {
     // 從請求上下文中獲取提供者
     const providerFromContext = this.getProviderFromContext();
 
-    // 設置緩存鍵，如果有提供者則包含在鍵中
-    const cacheKey = providerFromContext
-      ? `portfolio:${chain}:${address}:${providerFromContext}`
-      : `portfolio:${chain}:${address}`;
+    // 使用 CacheKeyService 創建緩存鍵
+    const cacheKey = this.cacheKeyService.createPortfolioKey(chain, address, providerFromContext);
 
     const cachedData = await this.cacheService.get(cacheKey);
     if (cachedData) {

@@ -1,6 +1,6 @@
 ---
 description: 快取策略
-globs: 
+globs:
 alwaysApply: false
 ---
 # 多層快取策略
@@ -43,17 +43,88 @@ OneKeyBalanceKit 實現了三層快取策略，用於優化區塊鏈資產餘額
 
 # 快取策略
 
-本項目實現了靈活的快取策略，支援記憶體快取和 Redis 快取。
+本專案使用 cache-manager v6 結合 Keyv 架構實現可靠的快取系統，支援 Redis 和記憶體快取模式。
 
-## 快取服務概述
+## 架構概述
 
-[CacheService](mdc:src/core/cache/cache.service.ts) 提供了一個通用的快取介面，能夠根據配置自動切換快取存儲方式。
+- 核心架構基於 NestJS 的 `@nestjs/cache-manager`
+- 使用 `@keyv/redis` 作為 Redis 介面
+- 支援自動降級到記憶體快取（當 Redis 不可用時）
+- 實現優化的模式刪除和快取失效策略
 
-核心特性：
-- 自動偵測並使用 Redis（若可用）或降級為記憶體快取
-- 支援 TTL（存活時間）設定
-- 提供模式化的快取刪除功能（僅適用於 Redis）
-- 全面的錯誤處理與日誌記錄
+## 關鍵文件
+
+- [src/core/cache/cache.module.ts](mdc:src/core/cache/cache.module.ts) - 快取模組配置
+- [src/core/cache/cache.service.ts](mdc:src/core/cache/cache.service.ts) - 快取服務實現
+- [src/core/cache/cache-key.service.ts](mdc:src/core/cache/cache-key.service.ts) - 快取鍵管理
+
+## 重要考量
+
+### Redis 客戶端獲取
+
+在 cache-manager v6 + Keyv 架構中，Redis 客戶端的位置不固定，需要使用多路徑檢測：
+
+```typescript
+// 使用多路徑檢測 Redis 客戶端
+const storeAny = store as any;
+const redisClient =
+  storeAny?.opts?.store?._redis ||
+  storeAny?._store?._redis ||
+  storeAny?.opts?.store?._client ||
+  storeAny?._store?._client ||
+  storeAny?.opts?.store?.client ||
+  storeAny?._store?.client;
+```
+
+為避免訪問私有屬性的 TypeScript 錯誤，可使用 `any` 類型斷言並配合 try-catch 處理：
+
+```typescript
+try {
+  // 嘗試獲取 Redis 客戶端
+  const redisClient = /* 多路徑檢測代碼 */
+  return redisClient;
+} catch (e) {
+  // 處理可能的錯誤
+  return null;
+}
+```
+
+### TTL 處理
+
+注意 TTL 單位轉換：
+- 在 `cache.service.ts` 中，API 接受秒為單位的 TTL
+- 在設置快取時需轉換為毫秒：`await this.cacheManager.set(key, value, ttlSeconds * 1000);`
+- 在配置 Memory 快取時也使用毫秒：`new Keyv({ ttl: 5 * 60 * 1000 })`
+
+### 錯誤處理和重連
+
+實現了完整的錯誤處理和自動重連機制：
+- 監聽 Redis 錯誤事件
+- 自動嘗試重連
+- 連接狀態監控
+- 降級到記憶體快取
+
+### 模式刪除策略
+
+使用 SCAN + UNLINK 非阻塞方式刪除符合模式的快取：
+```typescript
+// 批量刪除
+const { cursor: next, keys } = await redis.scan(cursor, {
+  MATCH: pattern,
+  COUNT: 100,
+});
+if (keys.length) {
+  await redis.unlink(keys); // 非阻塞刪除
+}
+```
+
+### TypeScript 類型處理
+
+在處理第三方庫自定義屬性時，使用類型斷言避免編譯錯誤：
+```typescript
+// 使用類型斷言處理 Keyv 內部結構
+const redisClient = (store as any)?.opts?.store?._redis;
+```
 
 ## 使用方法
 
@@ -66,61 +137,40 @@ OneKeyBalanceKit 實現了三層快取策略，用於優化區塊鏈資產餘額
    ```typescript
    // 存儲資料（帶 TTL）
    await this.cacheService.set('your-key', data, 3600); // TTL 為 3600 秒
-   
+
    // 讀取資料
    const data = await this.cacheService.get<YourType>('your-key');
-   
+
    // 刪除快取
    await this.cacheService.delete('your-key');
-   
+
    // 批次刪除（Redis 模式）
    await this.cacheService.deleteByPattern('prefix:*');
    ```
 
-3. **檢查快取類型**：
+3. **檢查快取類型與連接狀態**：
    ```typescript
    const cacheType = this.cacheService.getCacheType(); // 'Redis' 或 'Memory'
+   const isConnected = await this.cacheService.isRedisConnected(); // Redis 連接狀態
    ```
+
+## 快取鍵策略
+
+快取鍵格式為：`{prefix}:{chainType}:{chainId}:{address}`，例如：
+- `portfolio:eth:1:0x1234...` （以太坊主網地址）
+- `portfolio:sol:101:ABC123...` （Solana 地址）
+
+[CacheKeyService](mdc:src/core/cache/cache-key.service.ts) 提供了創建與解析快取鍵的統一接口。
 
 ## 最佳實踐
 
-1. **使用有意義的鍵名前綴**：
-   ```typescript
-   const key = `user:${userId}:profile`;
-   ```
-
-2. **根據資料特性設定適當的 TTL**：
-   - 頻繁變動的資料：短 TTL（幾秒到幾分鐘）
-   - 半靜態資料：中等 TTL（幾小時到一天）
-   - 靜態參考資料：長 TTL（幾天到幾週）
-
-3. **在關鍵更新後主動刪除快取**：
-   ```typescript
-   await updateUserProfile(userId, newData);
-   await this.cacheService.delete(`user:${userId}:profile`);
-   ```
-
-4. **使用模式刪除進行關聯清理**：
-   ```typescript
-   // 清除用戶的所有相關快取
-   await this.cacheService.deleteByPattern(`user:${userId}:*`);
-   ```
-
-5. **錯誤處理的優雅降級**：
-   ```typescript
-   try {
-     const cachedData = await this.cacheService.get<Data>('key');
-     if (cachedData) return cachedData;
-     
-     // 快取未命中，從源頭獲取資料
-     const freshData = await this.dataService.getFreshData();
-     await this.cacheService.set('key', freshData, 3600);
-     return freshData;
-   } catch (err) {
-     // 快取服務出錯時，直接從資料源獲取
-     return this.dataService.getFreshData();
-   }
-   ```
+1. 在進行快取操作前檢查 Redis 連接狀態
+2. 對大量數據的快取使用適當的 TTL
+3. 使用模式刪除批量無效化相關快取
+4. 使用 `setTimeout` 搭配 `void` 操作符處理異步函數的返回值
+5. 避免在事件處理器中直接使用 async 函數
+6. 在關鍵更新後主動使相關快取失效
+7. 使用多路徑檢測和 try-catch 處理提高 Redis 客戶端獲取的可靠性
 
 ## 快取過期策略
 
@@ -133,25 +183,25 @@ OneKeyBalanceKit 實現了三層快取策略，用於優化區塊鏈資產餘額
 | 代幣價格 | 1-10 分鐘  | 根據市場波動性調整 |
 | NFT 元數據 | 1 小時    | 元數據較少變更 |
 
-## 快取失效
+## Webhook 驅動的快取失效
 
-在以下情況應主動使快取失效：
+系統使用 Webhook 事件通知來主動使快取失效：
 
-1. 用戶執行了可能改變數據的操作（如轉賬）
-2. 前端用戶手動刷新請求
-3. 後台監測到數據變化
+- [WebhookService](mdc:src/webhook/webhook.service.ts) 處理鏈上事件通知
+- 當地址活動事件到達時，相關地址的快取會被清除
+- 使用簽名驗證確保 Webhook 請求的真實性
 
 ```typescript
 // 使快取失效示例
-async function transferTokens(fromAddress: string, toAddress: string, amount: string): Promise<TransactionResult> {
-  // 執行轉賬操作
-  const result = await this.blockchainProvider.transfer(fromAddress, toAddress, amount);
-  
+async function handleTransferEvent(event: TransferEvent): Promise<void> {
   // 主動使相關快取失效
-  await this.cacheManager.del(`balance:${fromAddress}`);
-  await this.cacheManager.del(`balance:${toAddress}`);
-  
-  return result;
+  await this.cacheKeyService.invalidateChainAddressCache(
+    event.chain,
+    event.chainId,
+    event.address
+  );
+
+  this.logger.log(`Invalidated cache for ${event.chain}:${event.chainId}:${event.address}`);
 }
 ```
 

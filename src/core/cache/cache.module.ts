@@ -1,11 +1,19 @@
 import { Module, Logger } from '@nestjs/common';
 import { CacheModule as NestCacheModule } from '@nestjs/cache-manager';
 import { CacheService } from './cache.service';
+import { CacheKeyService } from './cache-key.service';
 import { AppConfigService } from '../../config/config.service';
 import { ConfigsModule } from '../../config';
 import { createKeyv } from '@keyv/redis';
 import { Keyv } from 'keyv';
-import { CacheableMemory } from 'cacheable';
+import type { RedisClientOptions } from '@redis/client';
+
+// 自定義 CacheOptions 接口，以支持 isRedisStore 標記
+interface CustomCacheOptions {
+  ttl: number;
+  stores: Keyv<any>[];
+  isRedisStore?: boolean;
+}
 
 @Module({
   imports: [
@@ -14,7 +22,7 @@ import { CacheableMemory } from 'cacheable';
       isGlobal: true,
       imports: [ConfigsModule],
       inject: [AppConfigService],
-      useFactory: (configService: AppConfigService) => {
+      useFactory: (configService: AppConfigService): CustomCacheOptions => {
         const logger = new Logger('CacheModule');
 
         // 使用結構化的 Redis 配置
@@ -28,15 +36,21 @@ import { CacheableMemory } from 'cacheable';
             // 創建 Redis 連接字串
             const redisUrl = `redis://:${redisConfig.password}@${redisConfig.host}:${redisConfig.port}/${redisConfig.db}`;
 
+            // 使用 createKeyv 創建 Redis Keyv 客戶端
+            const redisKeyv = createKeyv(redisUrl, {
+              useUnlink: true, // 使用 UNLINK 代替 DEL，性能更好
+              clearBatchSize: 1000, // 批量刪除時的批次大小
+            });
+
             // 返回包含 Redis 設定的配置
             return {
+              ttl: 30 * 60, // 秒
               stores: [
-                // primary Redis store
-                createKeyv(redisUrl),
+                // 使用配置好的 redisKeyv 客戶端
+                redisKeyv,
               ],
-              ttl: 30 * 60, // 秒，不是毫秒
-              max: 100,
-              isRedisStore: true, // 保留標記以支持現有檢測邏輯
+              // 自定義屬性，用於在 Service 中檢測是否使用 Redis
+              isRedisStore: true,
             };
           } catch (error) {
             logger.error(`Failed to initialize Redis cache: ${error.message}`);
@@ -48,15 +62,14 @@ import { CacheableMemory } from 'cacheable';
 
         // 如果 Redis 配置不存在或初始化失敗，使用記憶體快取
         return {
-          stores: [new Keyv({ store: new CacheableMemory({ ttl: 5 * 60 * 1000, lruSize: 1000 }) })],
-          ttl: 5 * 60, // 秒，不是毫秒
-          max: 100,
-          isRedisStore: false,
+          ttl: 5 * 60, // 秒
+          stores: [new Keyv({ ttl: 5 * 60 * 1000 })], // 注意這裡是毫秒
+          isRedisStore: false, // 明確標記非 Redis 模式
         };
       },
     }),
   ],
-  providers: [CacheService],
-  exports: [CacheService, NestCacheModule],
+  providers: [CacheService, CacheKeyService],
+  exports: [CacheService, CacheKeyService, NestCacheModule],
 })
 export class CacheModule {}

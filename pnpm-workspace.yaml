@@ -1,4 +1,5 @@
 onlyBuiltDependencies:
+  - bigint-buffer
   - keccak
   - protobufjs
   - secp256k1

@@ -1,6 +1,6 @@
 import { Controller, Get, Param, NotFoundException } from '@nestjs/common';
 import { ChainServiceFactory } from '../services/core/chain-service.factory';
-import { SUPPORTED_CHAINS } from '../constants';
+import { CHAIN_INFO_MAP, ChainName } from '../constants';
 
 @Controller('chains')
 export class ChainsController {
@@ -11,14 +11,14 @@ export class ChainsController {
     const availableChainNames = this.chainServiceFactory.getAvailableChains();
 
     // 過濾出可用的鏈資訊
-    const availableChains = SUPPORTED_CHAINS.filter((chain) =>
-      availableChainNames.includes(chain.type.toLowerCase()),
-    ).map((chain) => ({
-      id: chain.id,
-      name: chain.name,
-      type: chain.type,
-      supportedSymbols: chain.coinSymbols,
-    }));
+    const availableChains = Object.values(CHAIN_INFO_MAP)
+      .filter((chain) => availableChainNames.includes(chain.name.toLowerCase()))
+      .map((chain) => ({
+        id: chain.id,
+        name: chain.display,
+        type: chain.name,
+        supportedSymbols: chain.coinSymbols,
+      }));
 
     return {
       chains: availableChains,

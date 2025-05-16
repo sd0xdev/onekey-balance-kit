@@ -6,7 +6,7 @@ import { AbstractChainService } from '../core/abstract-chain.service';
 import { Chain } from '../../decorators/chain.decorator';
 import { ChainName } from '../../constants/index';
 import { SolanaCluster, SOL_SYMBOL, SOL_DECIMALS } from './constants';
-import { BlockchainType, ProviderType } from '../../../providers/constants/blockchain-types';
+import { ProviderType } from '../../../providers/constants/blockchain-types';
 import { NetworkType } from '../../../providers/interfaces/blockchain-provider.interface';
 import { BalanceQueryable, BalanceResponse } from '../../interfaces/balance-queryable.interface';
 
@@ -127,10 +127,7 @@ export class SolanaService extends AbstractChainService implements BalanceQuerya
 
       try {
         // 從提供者工廠獲取 Solana 提供者
-        const provider = this.providerFactory.getProvider(
-          BlockchainType.SOLANA,
-          selectedProviderType,
-        );
+        const provider = this.providerFactory.getProvider(ChainName.SOLANA, selectedProviderType);
 
         if (provider && provider.isSupported()) {
           this.logInfo(`Using ${provider.getProviderName()} provider for Solana`);

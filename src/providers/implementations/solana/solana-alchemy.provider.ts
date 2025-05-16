@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Connection, PublicKey, clusterApiUrl } from '@solana/web3.js';
+import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { AbstractSolanaProviderService } from '../../abstract/abstract-solana-provider.service';
 import { BalancesResponse, NetworkType } from '../../interfaces/blockchain-provider.interface';
-import { BlockchainType, ProviderType } from '../../constants/blockchain-types';
+import { ProviderType } from '../../constants/blockchain-types';
+import { ChainName } from '../../../chains/constants';
 import { Provider } from '../../decorators/provider.decorator';
 import { HttpService } from '@nestjs/axios';
 import { lastValueFrom } from 'rxjs';
@@ -13,7 +15,7 @@ import { AxiosResponse } from 'axios';
  * Solana Alchemy 提供者實現
  */
 @Provider({
-  blockchainType: BlockchainType.SOLANA,
+  blockchainType: ChainName.SOLANA,
   providerType: ProviderType.ALCHEMY,
 })
 @Injectable()
@@ -164,7 +166,7 @@ export class SolanaAlchemyProvider extends AbstractSolanaProviderService {
 
       // 獲取所有代幣賬戶
       const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
-        programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'), // Token Program ID
+        programId: TOKEN_PROGRAM_ID,
       });
 
       // 格式化代幣餘額
