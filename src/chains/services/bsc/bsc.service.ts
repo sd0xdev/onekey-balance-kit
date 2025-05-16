@@ -4,7 +4,6 @@ import { Chain } from '../../decorators/chain.decorator';
 import { ChainName } from '../../constants/index';
 import { AbstractEvmChainService } from '../core/abstract-evm-chain.service';
 import { ProviderFactory } from '../../../providers/provider.factory';
-import { EVM_CHAINS } from '../../constants/evm-chains';
 
 /**
  * BSC(BNB Smart Chain)鏈服務
@@ -23,10 +22,10 @@ export class BscService extends AbstractEvmChainService {
   }
 
   /**
-   * 返回EVM鏈標識符
+   * 返回EVM鏈類型
    */
-  evmKey(): keyof typeof EVM_CHAINS {
-    return 'BSC';
+  evmChain(): ChainName {
+    return ChainName.BSC;
   }
 
   /**

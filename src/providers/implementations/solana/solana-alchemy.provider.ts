@@ -4,7 +4,8 @@ import { Connection, PublicKey, clusterApiUrl } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { AbstractSolanaProviderService } from '../../abstract/abstract-solana-provider.service';
 import { BalancesResponse, NetworkType } from '../../interfaces/blockchain-provider.interface';
-import { BlockchainType, ProviderType } from '../../constants/blockchain-types';
+import { ProviderType } from '../../constants/blockchain-types';
+import { ChainName } from '../../../chains/constants';
 import { Provider } from '../../decorators/provider.decorator';
 import { HttpService } from '@nestjs/axios';
 import { lastValueFrom } from 'rxjs';
@@ -14,7 +15,7 @@ import { AxiosResponse } from 'axios';
  * Solana Alchemy 提供者實現
  */
 @Provider({
-  blockchainType: BlockchainType.SOLANA,
+  blockchainType: ChainName.SOLANA,
   providerType: ProviderType.ALCHEMY,
 })
 @Injectable()

@@ -11,18 +11,14 @@ import { ModuleRef } from '@nestjs/core';
 import { BlockchainProviderInterface } from './interfaces/blockchain-provider.interface';
 import { EthereumProviderInterface } from './interfaces/ethereum-provider.interface';
 import { SolanaProviderInterface } from './interfaces/solana-provider.interface';
-import {
-  BlockchainType,
-  ProviderType,
-  BLOCKCHAIN_TO_DEFAULT_PROVIDER_MAP,
-  SYMBOL_TO_BLOCKCHAIN_MAP,
-} from './constants/blockchain-types';
+import { ProviderType, CHAIN_TO_DEFAULT_PROVIDER_MAP } from './constants/blockchain-types';
 import {
   PROVIDERS_TOKEN,
   ProviderDescriptor,
   ProviderRegistration,
 } from './constants/provider-registration';
 import { ProviderDiscoveryService } from './provider-discovery.service';
+import { ChainName, COIN_SYMBOL_TO_CHAIN_MAP } from '../chains/constants';
 
 /**
  * 提供者工廠類
@@ -74,7 +70,7 @@ export class ProviderFactory implements OnModuleInit {
    * @param providerClass 提供者類
    */
   registerProvider(
-    blockchainType: BlockchainType | string,
+    blockchainType: ChainName | string,
     providerType: ProviderType | string,
     providerClass: Type<BlockchainProviderInterface>,
   ): void {
@@ -95,7 +91,7 @@ export class ProviderFactory implements OnModuleInit {
    * @returns 提供者實例
    */
   getProvider(
-    blockchainType: BlockchainType | string,
+    blockchainType: ChainName | string,
     providerType?: ProviderType | string,
   ): BlockchainProviderInterface {
     // 將代幣符號轉換為區塊鏈類型
@@ -135,7 +131,7 @@ export class ProviderFactory implements OnModuleInit {
    * @returns 以太坊提供者實例
    */
   getEthereumProvider(providerType?: ProviderType | string): EthereumProviderInterface {
-    return this.getProvider(BlockchainType.ETHEREUM, providerType) as EthereumProviderInterface;
+    return this.getProvider(ChainName.ETHEREUM, providerType) as EthereumProviderInterface;
   }
 
   /**
@@ -144,7 +140,7 @@ export class ProviderFactory implements OnModuleInit {
    * @returns Solana 提供者實例
    */
   getSolanaProvider(providerType?: ProviderType | string): SolanaProviderInterface {
-    return this.getProvider(BlockchainType.SOLANA, providerType) as SolanaProviderInterface;
+    return this.getProvider(ChainName.SOLANA, providerType) as SolanaProviderInterface;
   }
 
   /**
@@ -155,7 +151,7 @@ export class ProviderFactory implements OnModuleInit {
    */
   getEvmProvider(chainId: number, providerType?: ProviderType | string): EthereumProviderInterface {
     // 根據chainId找到對應的blockchain類型
-    const blockchain = this.getBlockchainTypeByChainId(chainId) || BlockchainType.ETHEREUM;
+    const blockchain = this.getBlockchainTypeByChainId(chainId) || ChainName.ETHEREUM;
     return this.getProvider(blockchain, providerType) as EthereumProviderInterface;
   }
 
@@ -164,12 +160,12 @@ export class ProviderFactory implements OnModuleInit {
    * @param chainId 鏈ID
    * @returns 區塊鏈類型
    */
-  private getBlockchainTypeByChainId(chainId: number): string | undefined {
+  private getBlockchainTypeByChainId(chainId: number): ChainName | undefined {
     // 這裡簡單硬編碼一下常見鏈ID對應的blockchain類型，後續可以優化為動態配置
-    const chainIdToBlockchain: Record<number, string> = {
-      1: BlockchainType.ETHEREUM, // Ethereum Mainnet
-      137: 'polygon', // Polygon Mainnet
-      56: 'bsc', // BSC Mainnet
+    const chainIdToBlockchain: Record<number, ChainName> = {
+      1: ChainName.ETHEREUM, // Ethereum Mainnet
+      137: ChainName.POLYGON, // Polygon Mainnet
+      56: ChainName.BSC, // BSC Mainnet
       // 後續可以擴展更多鏈
     };
 
@@ -185,7 +181,7 @@ export class ProviderFactory implements OnModuleInit {
 
     this.providers.forEach((providerMap, blockchain) => {
       providerMap.forEach((_, provider) => {
-        result.push(new ProviderDescriptor(blockchain as BlockchainType, provider as ProviderType));
+        result.push(new ProviderDescriptor(blockchain as ChainName, provider as ProviderType));
       });
     });
 
@@ -205,7 +201,7 @@ export class ProviderFactory implements OnModuleInit {
       return fromConfig;
     }
 
-    return BLOCKCHAIN_TO_DEFAULT_PROVIDER_MAP[blockchainType as BlockchainType] || ProviderType.RPC;
+    return CHAIN_TO_DEFAULT_PROVIDER_MAP[blockchainType as ChainName] || ProviderType.RPC;
   }
 
   /**
@@ -213,12 +209,12 @@ export class ProviderFactory implements OnModuleInit {
    * @param input 輸入（可以是區塊鏈類型或代幣符號）
    * @returns 標準化的區塊鏈類型
    */
-  private normalizeBlockchainType(input: BlockchainType | string): string {
+  private normalizeBlockchainType(input: ChainName | string): string {
     const lowercaseInput = input.toString().toLowerCase();
 
     // 檢查是否為代幣符號
-    if (SYMBOL_TO_BLOCKCHAIN_MAP[lowercaseInput]) {
-      return SYMBOL_TO_BLOCKCHAIN_MAP[lowercaseInput];
+    if (COIN_SYMBOL_TO_CHAIN_MAP[lowercaseInput]) {
+      return COIN_SYMBOL_TO_CHAIN_MAP[lowercaseInput];
     }
 
     return lowercaseInput;

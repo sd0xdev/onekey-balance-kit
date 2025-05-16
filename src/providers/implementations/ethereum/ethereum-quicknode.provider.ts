@@ -3,7 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { AbstractEthereumProviderService } from '../../abstract/abstract-ethereum-provider.service';
 import { BalancesResponse, NetworkType } from '../../interfaces/blockchain-provider.interface';
 import { EthereumTransactionRequest } from '../../interfaces/ethereum-provider.interface';
-import { BlockchainType, ProviderType } from '../../constants/blockchain-types';
+import { ChainName } from '../../../chains/constants';
+import { ProviderType } from '../../constants/blockchain-types';
 import { Provider } from '../../decorators/provider.decorator';
 import { formatUnits, parseUnits } from 'ethers';
 import { Core } from '@quicknode/sdk';
@@ -13,7 +14,7 @@ import { Core } from '@quicknode/sdk';
  * 使用 QuickNode SDK 與 QuickNode endpoints 進行互動
  */
 @Provider({
-  blockchainType: BlockchainType.ETHEREUM,
+  blockchainType: ChainName.ETHEREUM,
   providerType: ProviderType.QUICKNODE,
 })
 @Injectable()

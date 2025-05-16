@@ -1,6 +1,7 @@
 import { SetMetadata } from '@nestjs/common';
-import { BlockchainType, ProviderType } from '../constants/blockchain-types';
+import { ProviderType } from '../constants/blockchain-types';
 import { PROVIDER_METADATA } from '../constants/provider-metadata';
+import { ChainName } from '../../chains/constants';
 
 /**
  * 區塊鏈類型元數據的常數
@@ -8,7 +9,7 @@ import { PROVIDER_METADATA } from '../constants/provider-metadata';
 export const BLOCKCHAIN_TYPE_METADATA = 'blockchain_type_metadata';
 
 export interface ProviderOptions {
-  blockchainType: BlockchainType | string;
+  blockchainType: ChainName | string;
   providerType: ProviderType | string;
 }
 

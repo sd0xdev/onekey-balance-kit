@@ -1,17 +1,19 @@
+import { ChainName } from '../../chains/constants';
+import { ProviderType } from './blockchain-types';
+
 /**
  * 用於提供者裝飾器元數據的常數
  */
 export const PROVIDER_METADATA = 'provider_metadata';
 
 /**
- * 將代幣符號映射到對應的提供者
+ * 推薦使用的提供者映射
  */
-export const SYMBOL_TO_PROVIDER_MAP: Record<string, string> = {
-  // 這裡可以定義符號到提供者的映射
-  // 例如 'eth': 'alchemy'
-  eth: 'alchemy',
-  sol: 'solana-rpc',
-  // 其他映射...
+export const CHAIN_TO_PROVIDER_MAP: Record<ChainName, ProviderType> = {
+  [ChainName.ETHEREUM]: ProviderType.ALCHEMY,
+  [ChainName.SOLANA]: ProviderType.ALCHEMY,
+  [ChainName.POLYGON]: ProviderType.ALCHEMY,
+  [ChainName.BSC]: ProviderType.ALCHEMY,
 };
 
 export * from './blockchain-types';

@@ -4,7 +4,7 @@ import { BalanceQueryable, BalanceResponse } from '../../interfaces/balance-quer
 import { ProviderFactory } from '../../../providers/provider.factory';
 import { NetworkType } from '../../../providers/interfaces/blockchain-provider.interface';
 import { ProviderType } from '../../../providers/constants/blockchain-types';
-import { EVM_CHAINS } from '../../constants/evm-chains';
+import { ChainCode, ChainName, EVM_CHAIN_INFO_MAP } from '../../constants';
 import { Injectable } from '@nestjs/common';
 
 /**
@@ -21,30 +21,30 @@ export abstract class AbstractEvmChainService
   }
 
   /**
-   * 獲取實現類對應的鏈索引鍵
-   * 例如：'ETH'、'POLY'、'BSC'等
+   * 獲取實現類對應的鏈類型
+   * 例如：ChainName.ETHEREUM, ChainName.POLYGON等
    */
-  abstract evmKey(): keyof typeof EVM_CHAINS;
+  abstract evmChain(): ChainName;
 
   /**
    * 獲取鏈元數據
    */
   protected get meta() {
-    return EVM_CHAINS[this.evmKey()];
+    return EVM_CHAIN_INFO_MAP[this.evmChain()];
   }
 
   /**
    * 獲取鏈名稱
    */
   getChainName(): string {
-    return this.meta.display;
+    return this.meta?.display || this.evmChain();
   }
 
   /**
    * 獲取鏈代幣符號
    */
   getChainSymbol(): string {
-    return this.meta.symbol;
+    return this.meta?.symbol || '';
   }
 
   /**
@@ -144,7 +144,7 @@ export abstract class AbstractEvmChainService
         // 從提供者工廠獲取對應鏈的提供者
         // 使用新的getEvmProvider方法，傳入對應的chainId
         const provider = this.providerFactory.getEvmProvider(
-          useTestnet ? this.getTestnetChainId() : this.meta.chainId,
+          useTestnet ? this.getTestnetChainId() : this.meta?.id || 0,
           selectedProviderType,
         );
 
@@ -156,10 +156,10 @@ export abstract class AbstractEvmChainService
 
           // 將提供者的響應轉換為標準響應格式
           return {
-            chainId: useTestnet ? this.getTestnetChainId() : this.meta.chainId,
+            chainId: useTestnet ? this.getTestnetChainId() : this.meta?.id || 0,
             nativeBalance: {
-              symbol: this.meta.symbol,
-              decimals: this.meta.decimals,
+              symbol: this.meta?.symbol || 'UNKNOWN',
+              decimals: this.meta?.decimals || 18,
               balance: balancesResponse.nativeBalance.balance,
               usd: 0, // 可以從其他服務獲取價格
             },
@@ -192,10 +192,10 @@ export abstract class AbstractEvmChainService
       this.logInfo('Using default implementation for balances');
       await new Promise((resolve) => setTimeout(resolve, 10));
       return {
-        chainId: useTestnet ? this.getTestnetChainId() : this.meta.chainId,
+        chainId: useTestnet ? this.getTestnetChainId() : this.meta?.id || 0,
         nativeBalance: {
-          symbol: this.meta.symbol,
-          decimals: this.meta.decimals,
+          symbol: this.meta?.symbol || 'UNKNOWN',
+          decimals: this.meta?.decimals || 18,
           balance: '1000000000000000000', // 1 單位
           usd: 0,
         },
@@ -216,12 +216,13 @@ export abstract class AbstractEvmChainService
    */
   protected getTestnetChainId(): number {
     // 預設測試網映射，實際應該在子類中覆寫
-    const testnetMap: Record<string, number> = {
-      ETH: 11155111, // Sepolia
-      POLY: 80001, // Mumbai
-      BSC: 97, // BSC Testnet
+    const testnetMap: Record<ChainName, number> = {
+      [ChainName.ETHEREUM]: 11155111, // Sepolia
+      [ChainName.POLYGON]: 80001, // Mumbai
+      [ChainName.BSC]: 97, // BSC Testnet
+      [ChainName.SOLANA]: 0, // 非EVM鏈，預設為0
     };
 
-    return testnetMap[this.evmKey()] || 0;
+    return testnetMap[this.evmChain()] || 0;
   }
 }

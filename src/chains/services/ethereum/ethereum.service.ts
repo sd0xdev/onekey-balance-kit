@@ -5,7 +5,6 @@ import { ChainName } from '../../constants/index';
 import { AbstractEvmChainService } from '../core/abstract-evm-chain.service';
 import { EthereumChainId } from './constants';
 import { ProviderFactory } from '../../../providers/provider.factory';
-import { EVM_CHAINS } from '../../constants/evm-chains';
 
 /**
  * 以太坊服務實現
@@ -24,10 +23,10 @@ export class EthereumService extends AbstractEvmChainService {
   }
 
   /**
-   * 返回EVM鏈標識符
+   * 返回EVM鏈類型
    */
-  evmKey(): keyof typeof EVM_CHAINS {
-    return 'ETH';
+  evmChain(): ChainName {
+    return ChainName.ETHEREUM;
   }
 
   /**
