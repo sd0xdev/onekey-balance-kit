@@ -1,8 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { CacheService } from '../core/cache/cache.service';
-import { CacheKeyService } from '../core/cache/cache-key.service';
 import {
   WebhookEventDto,
   WebhookEventType,

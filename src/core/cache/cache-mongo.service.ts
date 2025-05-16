@@ -186,33 +186,24 @@ export class CacheMongoService {
         `CacheMongoService handling address activity: ${event.chain}:${event.chainId}:${event.address}`,
       );
 
-      // 執行 Redis 緩存清理
-      const deletedCount = await this.cacheKeyService.invalidateChainAddressCache(
-        event.chain,
-        event.chainId,
-        event.address,
+      const [redisResult, mongoResult] = await Promise.allSettled([
+        this.cacheKeyService.invalidateChainAddressCache(event.chain, event.chainId, event.address),
+        this.dbService.invalidateAddressSnapshot(event.chain, event.chainId, event.address),
+      ]);
+
+      this.logger.debug(
+        `Invalidated ${redisResult.status === 'fulfilled' ? redisResult.value : 0} Redis cache entries for ${event.chain}:${event.chainId}:${event.address}`,
       );
 
       this.logger.debug(
-        `Invalidated ${deletedCount} Redis cache entries for ${event.chain}:${event.chainId}:${event.address}`,
-      );
-
-      // 處理 MongoDB 緩存失效
-      const mongoModifiedCount = await this.dbService.invalidateAddressSnapshot(
-        event.chain,
-        event.chainId,
-        event.address,
-      );
-
-      this.logger.debug(
-        `Invalidated MongoDB cache for ${event.chain}:${event.chainId}:${event.address}, modified ${mongoModifiedCount} records`,
+        `Invalidated ${mongoResult.status === 'fulfilled' ? mongoResult.value : 0} MongoDB cache entries for ${event.chain}:${event.chainId}:${event.address}`,
       );
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Failed to handle address activity in CacheMongoService: ${errorMessage}`,
-        error instanceof Error ? error.stack : undefined,
+        `Failed to handle address activity in CacheMongoService: ${error.message}`,
+        error.stack,
       );
+      return;
     }
   }
 }

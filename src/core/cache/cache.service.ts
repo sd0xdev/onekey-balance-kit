@@ -1,29 +1,31 @@
-import { Injectable, Inject, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import type { RedisClientType } from 'redis';
 import type { Keyv } from 'keyv';
-import { AppConfigService } from '../../config/config.service';
 import { ErrorCode } from '../../common/constants/error-codes';
 import { ApplicationException } from '../../common/exceptions/application.exception';
 
-// 定義一個新的接口來擴展 Cache 接口
-// 不繼承 Cache，避免類型衝突
-interface CustomCacheManager {
-  get<T>(key: string): Promise<T | undefined>;
-  set(key: string, value: any, ttl?: number): Promise<void>;
-  del(key: string): Promise<void>;
-  stores?: Array<{
-    opts?: {
-      store?: {
-        _redis?: RedisClientType;
-      };
-    };
-  }>;
+// 定義自定義Cache管理器類型
+type CustomCache = Cache & {
   isRedisStore?: boolean;
-  reset?(): Promise<void>;
+  stores?: any[];
+  reset?: () => Promise<void>;
+};
+
+/**
+ * 緩存類型
+ */
+export enum CacheType {
+  MEMORY = 'memory',
+  REDIS = 'redis',
 }
 
+/**
+ * 緩存服務
+ * 提供了對緩存的統一訪問和管理
+ */
 @Injectable()
 export class CacheService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(CacheService.name);
@@ -31,29 +33,37 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
   private readonly isUsingRedis: boolean;
   private reconnectTimer?: NodeJS.Timeout;
   private readonly reconnectInterval = 5000; // 5秒重連
+
+  // Redis 客戶端引用
   private redisClient: RedisClientType | null = null;
   private isInitialized = false; // 追踪是否已初始化連接
 
   constructor(
-    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache & Partial<CustomCacheManager>,
-    private readonly configService: AppConfigService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: CustomCache,
+    private readonly configService: ConfigService,
   ) {
-    const cfg = this.configService.redis;
-    if (cfg) {
-      this.logger.log(
-        `Redis configuration found: host=${cfg.host}, port=${cfg.port}, db=${cfg.db}`,
-      );
-    } else {
-      this.logger.warn('No Redis configuration found in AppConfigService');
-    }
-
-    const envTtl = parseInt(process.env.CACHE_TTL ?? '', 10);
-    this.defaultTtl = !isNaN(envTtl) && envTtl > 0 ? envTtl : 300;
-    this.logger.log(`Default cache TTL: ${this.defaultTtl} seconds`);
-
+    this.defaultTtl = Number(this.configService.get('CACHE_TTL', 300));
     this.isUsingRedis = this.detectRedisStore();
     this.logger.log(`Using Redis for caching: ${this.isUsingRedis}`);
-    this.logger.log(`CacheManager type: ${this.cacheManager.constructor.name}`);
+
+    if (this.cacheManager && this.cacheManager.constructor) {
+      this.logger.log(`CacheManager type: ${this.cacheManager.constructor.name}`);
+    } else {
+      this.logger.warn('CacheManager is not properly initialized');
+    }
+
+    // 檢查Redis配置
+    const redisHost = this.configService.get('REDIS_HOST');
+    const redisPort = this.configService.get('REDIS_PORT');
+    const redisDb = this.configService.get('REDIS_DB');
+
+    if (redisHost && redisPort) {
+      this.logger.log(
+        `Redis configuration found: host=${redisHost}, port=${redisPort}, db=${redisDb || 0}`,
+      );
+    } else {
+      this.logger.warn('No Redis configuration found in environment variables');
+    }
 
     // 懶啟動模式：不再立即獲取Redis客戶端和設置事件監聽器
     // 第一次使用時才會初始化
@@ -92,13 +102,12 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
     if (!this.isUsingRedis) return false;
 
     // 第一次初始化
-    if (!this.isInitialized) {
+    if (!this.redisClient) {
       this.logger.log('Initializing Redis connection (lazy initialization)');
       this.redisClient = this.getNativeRedisClient();
 
       if (this.redisClient) {
         this.setupRedisEventListeners();
-        this.isInitialized = true;
       } else {
         this.logger.warn('Redis client not available during lazy initialization');
         return false;
@@ -197,6 +206,12 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
    * 偵測是否為 Redis Store (優先使用 @Module 中配置的標記)
    */
   private detectRedisStore(): boolean {
+    // 首先檢查 cacheManager 是否存在
+    if (!this.cacheManager) {
+      this.logger.warn('Cache manager is not initialized');
+      return false;
+    }
+
     // 首先檢查 module 中設定的標記
     if (this.cacheManager.isRedisStore !== undefined) {
       return this.cacheManager.isRedisStore;
@@ -241,7 +256,7 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
     for (const store of stores) {
       try {
         // 使用 any 類型避免 TypeScript 錯誤
-        const storeAny = store as any;
+        const storeAny = store;
 
         // 依序檢查可能的路徑
         const redisClient =
@@ -280,7 +295,7 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
       );
       throw new ApplicationException(
         ErrorCode.CACHE_GET_FAILED,
-        `Failed to get cache: ${err instanceof Error ? err.message : String(err)}`,
+        `獲取快取失敗: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
@@ -302,7 +317,7 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
       );
       throw new ApplicationException(
         ErrorCode.CACHE_SET_FAILED,
-        `Failed to set cache: ${err instanceof Error ? err.message : String(err)}`,
+        `設置快取失敗: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
@@ -323,7 +338,7 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
       );
       throw new ApplicationException(
         ErrorCode.CACHE_SET_FAILED,
-        `Failed to delete cache: ${err instanceof Error ? err.message : String(err)}`,
+        `設置快取失敗: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
