@@ -81,8 +81,10 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           directory: ./coverage/unit
+          files: ./coverage/unit/coverage-final.json,./coverage/unit/lcov.info
           flags: unittests
           fail_ci_if_error: false
+          verbose: true
 
   build:
     needs: [lint, test]

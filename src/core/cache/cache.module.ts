@@ -1,6 +1,7 @@
 import { Module, Logger } from '@nestjs/common';
 import { CacheModule as NestCacheModule } from '@nestjs/cache-manager';
 import { CacheService } from './cache.service';
+import { CacheKeyService } from './cache-key.service';
 import { AppConfigService } from '../../config/config.service';
 import { ConfigsModule } from '../../config';
 import { createKeyv } from '@keyv/redis';
@@ -56,7 +57,7 @@ import { CacheableMemory } from 'cacheable';
       },
     }),
   ],
-  providers: [CacheService],
-  exports: [CacheService, NestCacheModule],
+  providers: [CacheService, CacheKeyService],
+  exports: [CacheService, CacheKeyService, NestCacheModule],
 })
 export class CacheModule {}

@@ -5,6 +5,7 @@ import {
   IsOptional,
   ValidateNested,
   IsEnum,
+  IsNumber,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -22,6 +23,10 @@ export class AddressActivityData {
   @IsString()
   @IsNotEmpty()
   network: string;
+
+  @IsNumber()
+  @IsOptional()
+  chainId?: number;
 
   @IsObject()
   @IsOptional()
