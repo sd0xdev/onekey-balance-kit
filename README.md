@@ -508,7 +508,7 @@ gcloud run services replace cloud-run-service-generated.yaml --region=asia-east1
 
 - `${ENV_SUFFIX}`: 環境後綴 (生產為空，開發為 `-dev`)
 - `${ENVIRONMENT}`: 環境名稱 (`production` 或 `staging`)
-- `${MAX_INSTANCES}`: 最大實例數 (生產為 `10`，開發為 `5`)
+- `${MAX_INSTANCES}`: 最大實例數 (生產為 `2`，開發為 `1`)
 - `${NODE_ENV}`: Node.js 環境 (`production` 或 `development`)
 - `${SECRET_PREFIX}`: 密鑰前綴 (`production` 或 `staging`)
 
