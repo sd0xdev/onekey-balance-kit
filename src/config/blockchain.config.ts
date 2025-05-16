@@ -10,6 +10,12 @@ export default registerAs('blockchain', () => ({
   defaultProvider: process.env.DEFAULT_BLOCKCHAIN_PROVIDER || 'alchemy',
 
   /**
+   * 啟用的EVM鏈列表
+   * 格式: ETH,POLY,BSC
+   */
+  enabledChains: process.env.ENABLE_CHAINS?.split(',') || ['ETH'],
+
+  /**
    * 區塊鏈提供者配置
    */
   providers: {

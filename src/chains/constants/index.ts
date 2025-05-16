@@ -9,6 +9,8 @@ export const CHAIN_METADATA = 'chain';
 export enum ChainName {
   ETHEREUM = 'ethereum',
   SOLANA = 'solana',
+  POLYGON = 'polygon',
+  BSC = 'bsc',
   // 可以在這裡添加更多的鏈
 }
 
@@ -18,6 +20,8 @@ export enum ChainName {
 export enum SupportedChainType {
   ETH = 'eth',
   SOL = 'sol',
+  POLY = 'poly',
+  BSC = 'bsc',
 }
 
 /**
@@ -45,6 +49,18 @@ export const SUPPORTED_CHAINS: ChainInfo[] = [
     name: 'Solana',
     type: ChainName.SOLANA,
     coinSymbols: ['sol', 'solana'], // 支持的代幣符號和別名
+  },
+  {
+    id: 137,
+    name: 'Polygon',
+    type: ChainName.POLYGON,
+    coinSymbols: ['poly', 'matic', 'polygon'], // 支持的代幣符號和別名
+  },
+  {
+    id: 56,
+    name: 'BNB Smart Chain',
+    type: ChainName.BSC,
+    coinSymbols: ['bsc', 'bnb'], // 支持的代幣符號和別名
   },
 ];
 

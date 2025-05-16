@@ -148,6 +148,35 @@ export class ProviderFactory implements OnModuleInit {
   }
 
   /**
+   * 獲取EVM链提供者
+   * @param chainId 链ID
+   * @param providerType 提供者類型
+   * @returns EVM提供者實例
+   */
+  getEvmProvider(chainId: number, providerType?: ProviderType | string): EthereumProviderInterface {
+    // 根據chainId找到對應的blockchain類型
+    const blockchain = this.getBlockchainTypeByChainId(chainId) || BlockchainType.ETHEREUM;
+    return this.getProvider(blockchain, providerType) as EthereumProviderInterface;
+  }
+
+  /**
+   * 根據鏈ID獲取對應的區塊鏈類型
+   * @param chainId 鏈ID
+   * @returns 區塊鏈類型
+   */
+  private getBlockchainTypeByChainId(chainId: number): string | undefined {
+    // 這裡簡單硬編碼一下常見鏈ID對應的blockchain類型，後續可以優化為動態配置
+    const chainIdToBlockchain: Record<number, string> = {
+      1: BlockchainType.ETHEREUM, // Ethereum Mainnet
+      137: 'polygon', // Polygon Mainnet
+      56: 'bsc', // BSC Mainnet
+      // 後續可以擴展更多鏈
+    };
+
+    return chainIdToBlockchain[chainId];
+  }
+
+  /**
    * 列出所有已註冊的提供者
    * @returns 提供者描述符列表
    */

@@ -4,6 +4,8 @@
 export enum BlockchainType {
   ETHEREUM = 'ethereum',
   SOLANA = 'solana',
+  POLYGON = 'polygon',
+  BSC = 'bsc',
   BITCOIN = 'bitcoin',
 }
 
@@ -24,6 +26,10 @@ export enum ProviderType {
 export const SYMBOL_TO_BLOCKCHAIN_MAP: Record<string, BlockchainType> = {
   eth: BlockchainType.ETHEREUM,
   sol: BlockchainType.SOLANA,
+  poly: BlockchainType.POLYGON,
+  matic: BlockchainType.POLYGON,
+  bsc: BlockchainType.BSC,
+  bnb: BlockchainType.BSC,
   btc: BlockchainType.BITCOIN,
 };
 
@@ -33,5 +39,7 @@ export const SYMBOL_TO_BLOCKCHAIN_MAP: Record<string, BlockchainType> = {
 export const BLOCKCHAIN_TO_DEFAULT_PROVIDER_MAP: Record<BlockchainType, ProviderType> = {
   [BlockchainType.ETHEREUM]: ProviderType.ALCHEMY,
   [BlockchainType.SOLANA]: ProviderType.ALCHEMY,
+  [BlockchainType.POLYGON]: ProviderType.ALCHEMY,
+  [BlockchainType.BSC]: ProviderType.ALCHEMY,
   [BlockchainType.BITCOIN]: ProviderType.ALCHEMY,
 };
