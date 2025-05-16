@@ -46,4 +46,11 @@ export default tseslint.config(
       'prettier/prettier': 'error',
     },
   },
+  // 為測試文件特別設置規則，關閉 unbound-method 警告
+  {
+    files: ['**/*.spec.ts', '**/*.test.ts', '**/*.spec.tsx', '**/*.test.tsx'],
+    rules: {
+      '@typescript-eslint/unbound-method': 'off',
+    },
+  },
 );

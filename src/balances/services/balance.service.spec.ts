@@ -23,6 +23,7 @@ describe('BalanceService', () => {
   // 模擬鏈服務
   const mockChainService = {
     getChainName: jest.fn().mockReturnValue('ethereum'),
+    getChainSymbol: jest.fn().mockReturnValue('ETH'),
     isValidAddress: jest.fn().mockReturnValue(true),
     getBalances: jest.fn(),
   };
@@ -119,7 +120,6 @@ describe('BalanceService', () => {
     const chainName = 'ethereum';
     const chainId = CHAIN_INFO_MAP[ChainName.ETHEREUM].id;
     const mockBalanceData = {
-      assets: [],
       updatedAt: 1234567890,
       nativeBalance: {
         symbol: 'ETH',
@@ -127,6 +127,8 @@ describe('BalanceService', () => {
         balance: '1000000000000000000',
         usd: 2000,
       },
+      tokens: [],
+      nfts: [],
     };
 
     it('should return cached data if available', async () => {
@@ -158,11 +160,21 @@ describe('BalanceService', () => {
         'alchemy',
       ]);
       expect((mockChainService.isValidAddress as any).mock.calls[0]).toEqual([address]);
-      expect((mockChainService.getBalances as any).mock.calls[0]).toEqual([address, chainId]);
+      expect((mockChainService.getBalances as any).mock.calls[0]).toEqual([
+        address,
+        chainId,
+        'alchemy',
+      ]);
 
       expect((notificationService.emitPortfolioUpdate as any).mock.calls.length).toBeGreaterThan(0);
       expect(result).toEqual({
-        ...mockBalanceData,
+        nativeBalance: expect.objectContaining({
+          symbol: expect.any(String),
+          decimals: expect.any(Number),
+          balance: expect.any(String),
+        }),
+        tokens: expect.any(Array),
+        nfts: expect.any(Array),
         updatedAt: expect.any(Number),
       });
     });

@@ -8,7 +8,7 @@ import {
 } from '../../common/exceptions/application.exception';
 import { ChainServiceFactory } from '../../chains/services/core/chain-service.factory';
 import {
-  BalanceResponse,
+  BalanceResponse as ModernBalanceResponse,
   isBalanceQueryable,
 } from '../../chains/interfaces/balance-queryable.interface';
 import { ProviderType } from '../../providers/constants/blockchain-types';
@@ -16,11 +16,15 @@ import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
 import { CHAIN_INFO_MAP } from '../../chains/constants';
 import { NotificationService } from '../../notification/notification.service';
+import { BalanceResponse as LegacyBalanceResponse } from '../../chains/interfaces/chain-service.interface';
 
 // 擴展Express的Request介面
 interface RequestWithBlockchainProvider extends Request {
   blockchainProvider?: string;
 }
+
+// 統一的餘額響應類型
+type BalanceResponse = ModernBalanceResponse;
 
 @Injectable({ scope: Scope.REQUEST })
 export class BalanceService {
@@ -62,6 +66,44 @@ export class BalanceService {
    */
   private getProviderFromContext(): string | undefined {
     return this.request?.blockchainProvider;
+  }
+
+  /**
+   * 將舊的 BalanceResponse 格式轉換為新格式
+   */
+  private convertLegacyBalanceToModern(
+    balanceData: LegacyBalanceResponse,
+    chainSymbol: string,
+  ): ModernBalanceResponse {
+    // 從舊版餘額數據中找到本幣的餘額
+    const nativeToken = balanceData.find((token) => token.tokenAddress === null);
+
+    // 構建新格式的本幣餘額
+    const nativeBalance = {
+      symbol: chainSymbol,
+      decimals: 18, // 預設值，應根據實際情況調整
+      balance: nativeToken?.balance || '0',
+    };
+
+    // 構建代幣列表
+    const tokens = balanceData
+      .filter((token) => token.tokenAddress !== null)
+      .map((token) => ({
+        mint: token.tokenAddress as string,
+        tokenMetadata: {
+          symbol: token.symbol,
+          name: token.symbol,
+          decimals: 18,
+        },
+        balance: token.balance,
+      }));
+
+    return {
+      nativeBalance,
+      tokens,
+      nfts: [],
+      updatedAt: Math.floor(Date.now() / 1000),
+    };
   }
 
   /**
@@ -114,16 +156,25 @@ export class BalanceService {
         );
       }
 
-      // 確保鏈服務實現了 BalanceQueryable 介面
-      if (!isBalanceQueryable(chainService)) {
+      let balanceData: ModernBalanceResponse | LegacyBalanceResponse;
+
+      // 先檢查是否實現了新的 BalanceQueryable 介面
+      if (isBalanceQueryable(chainService)) {
+        this.logger.debug(`Chain service implements BalanceQueryable interface`);
+        balanceData = await chainService.getBalances(address, chainId, providerFromContext);
+      }
+      // 如果沒有實現新介面，但有舊的 getBalances 方法
+      else if (typeof chainService.getBalances === 'function') {
+        this.logger.debug(`Chain service has legacy getBalances method`);
+        const legacyData = await chainService.getBalances(address, chainId);
+        // 轉換為新格式
+        balanceData = this.convertLegacyBalanceToModern(legacyData, chainService.getChainSymbol());
+      } else {
         throw new BalanceException(
           ErrorCode.BALANCE_CHAIN_NOT_SUPPORTED,
           `Chain ${chain} does not support balance queries`,
         );
       }
-
-      // 調用鏈服務的 getBalances 方法獲取餘額
-      const balanceData = await chainService.getBalances(address, chainId);
 
       if (!balanceData) {
         throw new BalanceException(
@@ -132,9 +183,15 @@ export class BalanceService {
         );
       }
 
-      // 組裝結果數據
-      const result = {
-        ...balanceData,
+      // 確保結果具有必要的屬性
+      const result: ModernBalanceResponse = {
+        nativeBalance: balanceData.nativeBalance || {
+          symbol: chainService.getChainSymbol(),
+          decimals: 18,
+          balance: '0',
+        },
+        tokens: balanceData.tokens || [],
+        nfts: balanceData.nfts || [],
         updatedAt: balanceData.updatedAt || Math.floor(Date.now() / 1000),
       };
 

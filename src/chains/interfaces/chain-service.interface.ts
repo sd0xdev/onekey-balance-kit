@@ -14,6 +14,15 @@ export type PrivateKey = string;
 export type TransactionResult = string;
 
 /**
+ * 餘額響應類型
+ */
+export type BalanceResponse = Array<{
+  symbol: string;
+  balance: string;
+  tokenAddress: string | null;
+}>;
+
+/**
  * 提供者感知介面
  * 實現此介面的服務可以設置和獲取預設提供者
  */
@@ -60,4 +69,10 @@ export interface ChainService {
    * 獲取鏈的代幣符號
    */
   getChainSymbol(): string;
+
+  /**
+   * 獲取地址的餘額（包括主幣和代幣）
+   * 此方法是可選的，不是所有鏈服務都必須實現
+   */
+  getBalances?(address: string, chainId?: number): Promise<BalanceResponse>;
 }

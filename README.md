@@ -25,14 +25,18 @@
 - [❓ 常見問題](#-常見問題)
 - [🔄 多鏈支持](#-多鏈支持)
 - [📜 授權協議](#-授權協議)
+- [RoadMap](#roadmap)
 
 ## ✨ 特性
 
 - **統一多鏈支持**：支持以太坊（EVM 兼容鏈）和 Solana，統一資產數據格式與查詢介面
 - **高效能快取系統**：三層快取架構確保高性能和低延遲
+
   - Cloudflare Edge 快取：地理位置分散，低延遲訪問
+
   - Redis 快取層：30-60秒快速存取
   - MongoDB 持久層：歷史數據分析與回溯
+
 - **實時數據更新**：通過 Webhook 機制實現數據即時更新
 - **高可用與可擴展**：微服務架構，支持水平擴展
 - **完整類型支持**：使用 TypeScript 開發，100% 類型覆蓋
@@ -251,12 +255,74 @@ A: 參考[區塊鏈提供者](.cursor/rules/blockchain-providers.mdc)文檔，�
 - **環境變量控制**：通過 `ENABLE_CHAINS=ETH,POLY,BSC` 設定啟用的鏈
 - **統一API接口**：所有鏈使用相同路徑格式 `/v1/balances/:chain/:address`
 
+支援新增EVM鏈的完整指南請參考 [區塊鏈服務模組](.cursor/rules/blockchain.mdc) 文檔。
+
 ## 📜 授權協議
 
 本項目基於 MIT 授權協議發布。完整授權條款請參見 [LICENSE](LICENSE) 文件。
 
 ---
 
-<p align="center">Made with ❤️ by <a href="https://github.com/sd0xdev">SD0</a></p>
+## RoadMap
 
-支援新增EVM鏈的完整指南請參考 [區塊鏈服務模組](.cursor/rules/blockchain.mdc) 文檔。
+### 1. 基礎鏈接層 (Core & Provider)
+
+- [x] ETH Mainnet MVP
+- [x] 多鏈抽象（EVM／L2／BTC／Solana／Discovery）
+- [x] Provider 抽象／Discovery
+
+### 2. 資料層 (Cache & Storage)
+
+- [x] Redis
+- [x] MongoDB （Snapshot 歷史）
+- [x] Webhook 與快取失效
+- [ ] 資產走勢（利用過期快取組合 OHLC）
+- [ ] 價格整合（串接行情 API，計算 Portfolio 市值）
+
+### 3. API 層 (Query Interface)
+
+- [x] `/balances` 查詢資產組合
+- [x] `/chains` 列出支援鏈
+
+### 4. 事件與通知 (Events & Notifications)
+
+- [x] 事件通知中心（業務操作解耦）
+- [ ] SSE 推送：快取失效／資產變動通知
+- [ ] 精細化快取失效：鏈上活動
+- [ ] 精細化快取失效：資產變動
+- [ ] 精細化快取失效：資產走勢
+
+### 5. DevOps & CI/CD
+
+- [x] GitHub Actions （CI Pipeline）
+- [x] Docker （多階段 Build）
+- [x] Docker Compose （本地開發）
+  - [ ] 本地運行
+- [x] Google Cloud — 自動化環境建置腳本
+- [x] Google Cloud — Secret Manager 整合
+- [x] Google Cloud — Cloud Run 部署
+- [x] Google Cloud — Workload Identity Federation （OIDC）
+- [x] Local Webhook 配置
+
+### 6. 前端 Dashboard
+
+- [ ] 資產總覽 Dashboard
+- [ ] 自定義 Provider API Key
+- [ ] 圖表／走勢視覺化（待後端資料完成後對接）
+
+### 7. 觀測
+
+- [ ] 性能觀測
+- [ ] 全鏈路追蹤
+- [ ] 告警
+
+### 8. 其他
+
+- [x] GCP 部署指南
+- [x] 環境變數指引
+- [x] Webhook Debugger 指南
+- [x] 架構設計工作底稿
+- [x] workload identity federation 指南
+- [x] [專案設計指南](.cursor/rules)
+
+<p align="center">Made with ❤️ by <a href="https://github.com/sd0xdev">SD0</a></p>
