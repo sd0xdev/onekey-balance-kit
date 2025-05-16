@@ -269,24 +269,52 @@ A: 參考[區塊鏈提供者](.cursor/rules/blockchain-providers.mdc)文檔，�
 
 - [x] ETH Mainnet MVP
 - [x] 多鏈抽象（EVM／L2／BTC／Solana／Discovery）
-- [x] Provider 抽象／Discovery
+  - [x] 服務註冊 / 發現 / 路由
+  - [x] EVM 鏈抽象
+    - [x] Base
+    - [x] Optimism
+    - [x] Polygon
+    - [ ] Avalanche
+    - [x] BSC
+    - [ ] Arbitrum
+    - [x] 測試網
+      - [x] ETH Sepolia
+  - [x] Solana
+    - [x] Mainnet
+    - [x] Testnet
+  - [ ] Bitcoin
+- [x] Provider 抽象
+  - [x] 服務註冊 / 發現 / 路由
+  - [x] Alchemy
+    - [x] EVM Base
+    - [x] Solana
+  - [x] QuickNode
+    - [x] Ethereum
 
 ### 2. 資料層 (Cache & Storage)
 
 - [x] Redis
 - [x] MongoDB （Snapshot 歷史）
-- [x] Webhook 與快取失效
+- [x] 快取策略
+  - [x] 三層快取
+    - [ ] Edge 快取
+    - [x] Redis 快取（熱快取）
+    - [x] MongoDB 快取（溫快取）
+  - [x] 快取失效
 - [ ] 資產走勢（利用過期快取組合 OHLC）
 - [ ] 價格整合（串接行情 API，計算 Portfolio 市值）
 
 ### 3. API 層 (Query Interface)
 
-- [x] `/balances` 查詢資產組合
+- [x] `/balances/:chain/:address` 查詢資產組合
 - [x] `/chains` 列出支援鏈
+- [x] `/chains/:chain/validate/:address` 驗證地址格式
+- [x] `/webhook` 接收 Webhook 事件
 
 ### 4. 事件與通知 (Events & Notifications)
 
 - [x] 事件通知中心（業務操作解耦）
+- [x] Webhook 機制
 - [ ] SSE 推送：快取失效／資產變動通知
 - [ ] 精細化快取失效：鏈上活動
 - [ ] 精細化快取失效：資產變動
@@ -314,6 +342,7 @@ A: 參考[區塊鏈提供者](.cursor/rules/blockchain-providers.mdc)文檔，�
 - [ ] 資產總覽 Dashboard
 - [ ] 自定義 Provider API Key
 - [ ] 圖表／走勢視覺化（待後端資料完成後對接）
+- [ ] OpenAPI 文件
 
 ### 7. 觀測
 
