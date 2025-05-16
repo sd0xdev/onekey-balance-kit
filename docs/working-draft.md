@@ -173,52 +173,9 @@ const { nativeBalance, tokens, nfts } =
 
 Redis Upstash ≤ 10 K Cmd/月免費；Mongo Atlas M0 免費。超量後以 PAYG 計。
 
----
-
-## 7. `src/` 目錄
-
-```other
-src/
-├─ main.ts & app.module.ts
-│
-├─ core/
-│   ├─ balance/
-│   ├─ cache/
-│   └─ db/
-│
-├─ chains/
-│   ├─ ethereum/
-│   └─ solana/
-│
-├─ providers/
-│   ├─ alchemy/
-│   └─ rpc/
-│
-└─ webhook/
-```
-
----
-
-## 8. 環境變數
-
-```other
-ALCHEMY_API_KEY_ETH=xxxxxxxx
-ALCHEMY_API_KEY_SOL=yyyyyyyy
-REDIS_URL=redis://……
-MONGO_URL=mongodb+srv://……
-```
-
----
-
-## 9. Roadmap
+## 7. Roadmap
 
 - ETH Mainnet MVP
 - Solana 上線
 - Arbitrum / Optimism 插件
 - 前端 Dashboard (Next.js + shadcn/ui)
-
----
-
-## 10. License
-
-MIT © 2025 SD0
