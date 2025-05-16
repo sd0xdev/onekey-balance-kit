@@ -1,7 +1,9 @@
 import { Injectable, Scope } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ChainService } from '../../interfaces/chain-service.interface';
 import { ChainServiceFactory } from './chain-service.factory';
 import { RequestContextService } from './request-context.service';
+import { ChainName } from '../../constants';
 
 /**
  * 區塊鏈服務
@@ -14,7 +16,19 @@ export class BlockchainService {
   constructor(
     private readonly chainServiceFactory: ChainServiceFactory,
     private readonly requestContext: RequestContextService,
+    private readonly configService: ConfigService,
   ) {}
+
+  /**
+   * 檢查指定的鏈是否已啟用
+   *
+   * @param chainKey 鏈的鍵值，如 'ETH', 'POLY', 'BSC'
+   * @returns 是否啟用
+   */
+  isChainEnabled(chainKey: string): boolean {
+    const enabledChains = this.configService.get<string[]>('blockchain.enabledChains', ['ETH']);
+    return enabledChains.includes(chainKey);
+  }
 
   /**
    * 獲取指定鏈的服務，使用當前請求上下文中的提供者

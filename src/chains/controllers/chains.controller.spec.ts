@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { ChainsController } from './chains.controller';
 import { ChainServiceFactory } from '../services/core/chain-service.factory';
-import { SUPPORTED_CHAINS, ChainName } from '../constants';
+import { ChainName } from '../constants';
 
 // 創建模擬的ChainService類
 class MockChainService {

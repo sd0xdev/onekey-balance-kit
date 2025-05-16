@@ -14,11 +14,12 @@ alwaysApply: false
 1. **統一介面**：所有鏈服務實現 [ChainService](mdc:src/chains/interfaces/chain-service.interface.ts) 介面
 2. **餘額功能擴展**：支援餘額查詢的鏈服務額外實現 [BalanceQueryable](mdc:src/chains/interfaces/balance-queryable.interface.ts) 介面
 3. **抽象基類**：[AbstractChainService](mdc:src/chains/services/core/abstract-chain.service.ts) 提供通用實現
-4. **工廠模式**：[ChainServiceFactory](mdc:src/chains/services/core/chain-service.factory.ts) 管理服務實例
-5. **裝飾器註冊**：使用 [@Chain](mdc:src/chains/decorators/chain.decorator.ts) 裝飾器自動發現和註冊服務
-6. **攔截器機制**：使用 [BlockchainProviderInterceptor](mdc:src/chains/interceptors/blockchain-provider.interceptor.ts) 處理提供者選擇
-7. **請求級提供者**：使用 [UseBlockchainProvider](mdc:src/chains/decorators/blockchain-provider.decorator.ts) 裝飾器設定提供者
-8. **錯誤處理**：使用 [ErrorCode](mdc:src/common/constants/error-codes.ts) 和自定義異常提供統一錯誤處理
+4. **EVM 抽象基類**：[AbstractEvmChainService](mdc:src/chains/services/core/abstract-evm-chain.service.ts) 提供 EVM 鏈共享邏輯
+5. **工廠模式**：[ChainServiceFactory](mdc:src/chains/services/core/chain-service.factory.ts) 管理服務實例
+6. **裝飾器註冊**：使用 [@Chain](mdc:src/chains/decorators/chain.decorator.ts) 裝飾器自動發現和註冊服務
+7. **攔截器機制**：使用 [BlockchainProviderInterceptor](mdc:src/chains/interceptors/blockchain-provider.interceptor.ts) 處理提供者選擇
+8. **請求級提供者**：使用 [UseBlockchainProvider](mdc:src/chains/decorators/blockchain-provider.decorator.ts) 裝飾器設定提供者
+9. **錯誤處理**：使用 [ErrorCode](mdc:src/common/constants/error-codes.ts) 和自定義異常提供統一錯誤處理
 
 ## 目錄結構
 
@@ -35,18 +36,22 @@ src/chains/
 ├── services/                       # 服務實現
 │   ├── core/                       # 核心服務
 │   │   ├── abstract-chain.service.ts # 抽象鏈服務基類
+│   │   ├── abstract-evm-chain.service.ts # EVM鏈服務基類
 │   │   ├── chain-service.factory.ts  # 鏈服務工廠
 │   │   ├── discovery.service.ts      # 裝飾器發現服務
 │   │   ├── blockchain.service.ts     # 區塊鏈服務
 │   │   └── request-context.service.ts # 請求上下文服務
 │   ├── ethereum/                   # 以太坊服務
 │   │   └── ethereum.service.ts
+│   ├── polygon/                    # Polygon 服務
+│   │   └── polygon.service.ts
+│   ├── bsc/                        # BSC 服務
+│   │   └── bsc.service.ts
 │   └── solana/                     # Solana 服務
 │       └── solana.service.ts
-├── controllers/                    # 控制器
-│   └── chains.controller.ts        # 鏈服務 API 控制器
 ├── constants/                      # 常量定義
-│   └── index.ts                    # 鏈相關常量
+│   ├── index.ts                    # 鏈相關常量
+│   └── evm-chains.ts               # EVM鏈元數據定義
 ├── chains.module.ts                # 區塊鏈模組
 └── index.ts                        # 入口檔案
 ```
@@ -55,8 +60,50 @@ src/chains/
 
 目前支援的區塊鏈包括：
 
-- **以太坊** (ETH)：完整支援地址驗證、交易查詢、餘額查詢
+### 非 EVM 鏈
 - **Solana** (SOL)：完整支援地址驗證、交易查詢、餘額查詢
+
+### EVM 鏈
+- **以太坊** (ETH)：完整支援地址驗證、交易查詢、餘額查詢
+- **Polygon** (POLY/MATIC)：完整支援地址驗證、交易查詢、餘額查詢
+- **BSC** (BNB Smart Chain)：完整支援地址驗證、交易查詢、餘額查詢
+
+## EVM 多鏈支持設計
+
+系統使用抽象層和集中式元數據管理來實現可擴展的 EVM 多鏈支持：
+
+### 1. 抽象化設計
+
+- **抽象 EVM 服務基類**：[AbstractEvmChainService](mdc:src/chains/services/core/abstract-evm-chain.service.ts) 提供所有 EVM 鏈共享的邏輯
+- **極簡子類實現**：每條 EVM 鏈只需實現 `evmKey()` 和 `getTestnetChainId()` 方法
+- **統一實現**：地址驗證、餘額查詢等都統一在基類中實現，確保一致性
+
+### 2. 元數據集中管理
+
+- **元數據表**：[evm-chains.ts](mdc:src/chains/constants/evm-chains.ts) 中定義了 EVM 鏈的元數據
+- **元數據結構**：`EvmChainMeta` 包含 chainId、名稱、顯示名、代幣符號和小數位數
+- **靈活擴展**：只需添加新的鏈信息到 `EVM_CHAINS` 對象即可支持更多 EVM 鏈
+
+```typescript
+// EVM鏈元數據定義示例
+export const EVM_CHAINS: Record<string, EvmChainMeta> = {
+  ETH: { chainId: 1, name: 'ethereum', display: 'Ethereum', symbol: 'ETH', decimals: 18 },
+  POLY: { chainId: 137, name: 'polygon', display: 'Polygon', symbol: 'MATIC', decimals: 18 },
+  BSC: { chainId: 56, name: 'bsc', display: 'BNB Smart Chain', symbol: 'BNB', decimals: 18 },
+};
+```
+
+### 3. 提供者工廠升級
+
+- **統一 EVM 提供者獲取**：`getEvmProvider(chainId, providerType)` 方法通過 chainId 獲取對應的提供者
+- **鏈 ID 映射**：自動將 chainId 映射到對應的區塊鏈類型
+- **API 共享**：同一 API Key 可用於多鏈查詢（例如 Alchemy 支持 ETH/POLY 等鏈）
+
+### 4. 環境變數控制
+
+- **選擇性啟用**：使用 `ENABLE_CHAINS` 環境變量控制啟用的鏈（格式：`ENABLE_CHAINS=ETH,POLY,BSC`）
+- **配置定義**：在 [blockchain.config.ts](mdc:src/config/blockchain.config.ts) 中處理環境變量
+- **動態註冊**：在 ChainsModule 中根據配置動態啟用對應的鏈服務
 
 ## 使用方法
 
@@ -90,9 +137,11 @@ export class YourService {
   async someMethod() {
     // 使用鏈名稱
     const ethService = this.chainServiceFactory.getChainService(ChainName.ETHEREUM);
+    const polyService = this.chainServiceFactory.getChainService(ChainName.POLYGON);
 
     // 也可使用代幣符號（不區分大小寫）
     const solService = this.chainServiceFactory.getChainService('sol');
+    const bscService = this.chainServiceFactory.getChainService('bnb');
 
     // 使用服務方法
     const isValid = ethService.isValidAddress('0x...');
@@ -113,6 +162,7 @@ export class YourService {
   async someMethod() {
     // 獲取特定鏈的服務 - 會自動使用請求上下文中的提供者
     const ethereumService = this.blockchainService.getService('ethereum');
+    const polygonService = this.blockchainService.getService('polygon');
 
     // 使用服務方法
     const isValid = ethereumService.isValidAddress('0x...');
@@ -166,25 +216,6 @@ export interface BalanceQueryable {
 
 所有餘額查詢返回統一的 `BalanceResponse` 格式，包含原生代幣、代幣和 NFT 資訊。
 
-## 錯誤處理
-
-系統使用統一的錯誤處理機制：
-
-1. **錯誤代碼**：使用 `ErrorCode` 枚舉定義不同類型的錯誤
-2. **自定義異常**：使用 `BlockchainException`, `BalanceException` 等自定義異常類
-3. **統一格式**：HTTP 響應以統一格式返回錯誤信息
-
-例如，處理無效地址：
-
-```typescript
-if (!chainService.isValidAddress(address)) {
-  throw new BlockchainException(
-    ErrorCode.BLOCKCHAIN_INVALID_ADDRESS,
-    `Invalid ${chain} address: ${address}`,
-  );
-}
-```
-
 ## API 端點
 
 鏈服務模組提供了以下 API 端點：
@@ -194,72 +225,53 @@ if (!chainService.isValidAddress(address)) {
 - `GET /chains/:chain/transactions/:address`: 獲取地址的交易歷史
 - `GET /balances/:chain/:address`: 獲取地址的餘額資訊
 
-## 擴展新區塊鏈
+## 添加新的 EVM 鏈
 
-添加新的區塊鏈支援需要：
+添加新的 EVM 鏈需要以下步驟：
 
-1. 更新 [constants/index.ts](mdc:src/chains/constants/index.ts) 中的 `ChainName` 枚舉
-2. 創建繼承 `AbstractChainService` 的服務類並使用 `@Chain()` 裝飾器
-3. 可選：實現 `BalanceQueryable` 介面提供餘額查詢功能
-4. 確保新的鏈服務被 NestJS 的依賴注入系統管理（添加到適當的模組中）
-
-### 添加新的鏈服務示例
+1. 在 [evm-chains.ts](mdc:src/chains/constants/evm-chains.ts) 中添加鏈元數據：
 
 ```typescript
-import { Injectable } from '@nestjs/common';
-import { AbstractChainService } from './chains/services/core/abstract-chain.service';
-import { Chain } from './chains/decorators/chain.decorator';
-import { ChainName } from './chains/constants';
-import { BalanceQueryable, BalanceResponse } from './chains/interfaces/balance-queryable.interface';
-import { ConfigService } from '@nestjs/config';
+export const EVM_CHAINS: Record<string, EvmChainMeta> = {
+  // 現有鏈...
+  ARBITRUM: { chainId: 42161, name: 'arbitrum', display: 'Arbitrum', symbol: 'ETH', decimals: 18 },
+};
+```
 
+2. 在 [constants/index.ts](mdc:src/chains/constants/index.ts) 中添加 ChainName：
+
+```typescript
+export enum ChainName {
+  // 現有鏈...
+  ARBITRUM = 'arbitrum',
+}
+```
+
+3. 創建繼承 AbstractEvmChainService 的鏈服務實現：
+
+```typescript
 @Injectable()
-@Chain(ChainName.YOUR_CHAIN)
-export class YourChainService extends AbstractChainService implements BalanceQueryable {
-  constructor(protected readonly configService: ConfigService) {
-    super();
-    // 從配置中獲取默認提供者
-    const defaultProvider = this.configService.get<string>('blockchain.defaultProvider', 'alchemy');
+@Chain(ChainName.ARBITRUM)
+export class ArbitrumService extends AbstractEvmChainService {
+  constructor(
+    protected readonly configService: ConfigService,
+    providerFactory: ProviderFactory,
+  ) {
+    super(providerFactory);
+    const defaultProvider = this.configService.get<string>('blockchain.arbitrumProvider', 'alchemy');
     this.setDefaultProvider(defaultProvider);
   }
 
-  getChainName(): string {
-    return ChainName.YOUR_CHAIN;
+  evmKey() {
+    return 'ARBITRUM';
   }
 
-  getChainSymbol(): string {
-    return 'YCN';
-  }
-
-  isValidAddress(address: string): boolean {
-    // 實現驗證邏輯
-    return true;
-  }
-
-  async getAddressTransactionHashes(address: string): Promise<string[]> {
-    // 實現獲取交易哈希的邏輯
-    return ['hash1', 'hash2'];
-  }
-
-  async getTransactionDetails(hash: string): Promise<any> {
-    // 實現獲取交易詳情的邏輯
-    return { hash, details: 'some details' };
-  }
-
-  async getBalances(address: string, useTestnet = false, providerType?: string): Promise<BalanceResponse> {
-    // 實現餘額查詢邏輯
-    return {
-      nativeBalance: {
-        symbol: this.getChainSymbol(),
-        decimals: 18,
-        balance: '1000000000000000000'
-      },
-      tokens: [],
-      nfts: [],
-      updatedAt: Math.floor(Date.now() / 1000)
-    };
+  protected getTestnetChainId() {
+    return 421613; // Arbitrum Goerli
   }
 }
 ```
 
-詳細實作請參考 [README.md](mdc:src/chains/README.md) 中的擴展指南。
+4. 在 [ChainsModule](mdc:src/chains/chains.module.ts) 中註冊新服務
+
+詳細實作請參考 [README.md](mdc:README.md) 中的 EVM 多鏈支持部分。

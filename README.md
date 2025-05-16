@@ -583,4 +583,14 @@ pnpm test:cov
 ---
 
 <p align="center">Made with ❤️ by <a href="https://github.com/sd0xdev">SD0</a></p>
-```
+
+# EVM多鏈支持
+
+本專案支援多條EVM兼容鏈，包括以太坊、Polygon和BSC，具有以下核心特點：
+
+- **抽象基類設計**：`AbstractEvmChainService` 提供統一邏輯，新鏈只需少量代碼
+- **中央化元數據**：鏈配置統一管理於 `src/chains/constants/evm-chains.ts`
+- **環境變量控制**：通過 `ENABLE_CHAINS=ETH,POLY,BSC` 設定啟用的鏈
+- **統一API接口**：所有鏈使用相同路徑格式 `/v1/balances/:chain/:address`
+
+支援新增EVM鏈的完整指南請參考 [區塊鏈服務模組](.cursor/rules/blockchain.mdc) 文檔。

@@ -5,7 +5,6 @@ import { ProviderFactory } from '../../../providers/provider.factory';
 import { SolanaCluster, SOL_SYMBOL, SOL_DECIMALS } from './constants';
 import { ChainName } from '../../constants';
 import { NetworkType } from '../../../providers/interfaces/blockchain-provider.interface';
-import { BlockchainType } from '../../../providers/constants/blockchain-types';
 
 // 模擬 Solana 提供者
 const mockSolanaProvider = {
@@ -133,10 +132,7 @@ describe('SolanaService', () => {
     it('應該使用提供者獲取餘額並返回正確格式的結果', async () => {
       const result = await service.getBalances(address);
 
-      expect(mockProviderFactory.getProvider).toHaveBeenCalledWith(
-        BlockchainType.SOLANA,
-        'alchemy',
-      );
+      expect(mockProviderFactory.getProvider).toHaveBeenCalledWith(ChainName.SOLANA, 'alchemy');
       expect(mockSolanaProvider.getBalances).toHaveBeenCalledWith(address, NetworkType.MAINNET);
 
       expect(result).toEqual({
@@ -189,10 +185,7 @@ describe('SolanaService', () => {
       const providerType = 'quicknode';
       await service.getBalances(address, false, providerType);
 
-      expect(mockProviderFactory.getProvider).toHaveBeenCalledWith(
-        BlockchainType.SOLANA,
-        providerType,
-      );
+      expect(mockProviderFactory.getProvider).toHaveBeenCalledWith(ChainName.SOLANA, providerType);
     });
 
     it('如果地址無效應該返回零餘額的響應', async () => {

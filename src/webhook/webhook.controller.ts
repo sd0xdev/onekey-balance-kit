@@ -22,7 +22,7 @@ export class WebhookController {
 
   @Post()
   async handleWebhook(
-    @Headers('x-webhook-signature') signature: string,
+    @Headers('x-alchemy-signature') signature: string,
     @Body() payload: WebhookEventDto,
     @Req() request: Request,
   ) {

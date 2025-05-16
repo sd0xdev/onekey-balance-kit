@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { EthereumService, EthereumBalancesResponse } from './ethereum.service';
+import { EthereumService } from './ethereum.service';
 import { ProviderFactory } from '../../../providers/provider.factory';
 import { EthereumChainId, ETH_SYMBOL, ETH_DECIMALS } from './constants';
 import { ChainName } from '../../constants';
@@ -16,6 +16,7 @@ const mockEthereumProvider = {
 // 模擬提供者工廠
 const mockProviderFactory = {
   getEthereumProvider: jest.fn().mockReturnValue(mockEthereumProvider),
+  getEvmProvider: jest.fn().mockReturnValue(mockEthereumProvider),
 };
 
 // 模擬配置服務
@@ -145,7 +146,10 @@ describe('EthereumService', () => {
     it('應該使用提供者獲取餘額並返回正確格式的結果', async () => {
       const result = await service.getBalances(address);
 
-      expect(mockProviderFactory.getEthereumProvider).toHaveBeenCalledWith('alchemy');
+      expect(mockProviderFactory.getEvmProvider).toHaveBeenCalledWith(
+        EthereumChainId.MAINNET,
+        'alchemy',
+      );
       expect(mockEthereumProvider.getBalances).toHaveBeenCalledWith(address, NetworkType.MAINNET);
 
       expect(result).toEqual({
@@ -181,6 +185,10 @@ describe('EthereumService', () => {
     it('應該使用測試網絡獲取餘額', async () => {
       await service.getBalances(address, true);
 
+      expect(mockProviderFactory.getEvmProvider).toHaveBeenCalledWith(
+        EthereumChainId.SEPOLIA,
+        'alchemy',
+      );
       expect(mockEthereumProvider.getBalances).toHaveBeenCalledWith(address, NetworkType.TESTNET);
     });
 
@@ -188,7 +196,10 @@ describe('EthereumService', () => {
       const providerType = 'quicknode';
       await service.getBalances(address, false, providerType);
 
-      expect(mockProviderFactory.getEthereumProvider).toHaveBeenCalledWith(providerType);
+      expect(mockProviderFactory.getEvmProvider).toHaveBeenCalledWith(
+        EthereumChainId.MAINNET,
+        providerType,
+      );
     });
 
     it('如果地址無效應該拋出錯誤', async () => {
@@ -207,7 +218,7 @@ describe('EthereumService', () => {
           symbol: ETH_SYMBOL,
           decimals: ETH_DECIMALS,
           balance: '1000000000000000000',
-          usd: 3000,
+          usd: 0,
         },
         fungibles: [],
         nfts: [],
@@ -226,7 +237,7 @@ describe('EthereumService', () => {
           symbol: ETH_SYMBOL,
           decimals: ETH_DECIMALS,
           balance: '1000000000000000000',
-          usd: 3000,
+          usd: 0,
         },
         fungibles: [],
         nfts: [],

@@ -39,7 +39,7 @@ BalanceService ──────► ChainServiceFactory ──────► C
 
 ```typescript
 @Provider({
-  blockchainType: BlockchainType.ETHEREUM,
+  blockchainType: ChainName.ETHEREUM,
   providerType: ProviderType.ALCHEMY,
 })
 @Injectable()
@@ -86,7 +86,7 @@ export interface BlockchainProviderInterface {
 2. **使用 @Provider 裝飾器標記**：
    ```typescript
    @Provider({
-     blockchainType: BlockchainType.YOUR_BLOCKCHAIN,
+     blockchainType: ChainName.YOUR_BLOCKCHAIN,
      providerType: ProviderType.YOUR_PROVIDER,
    })
    @Injectable()
@@ -108,13 +108,13 @@ export interface BlockchainProviderInterface {
 constructor(private readonly providerFactory: ProviderFactory) {}
 
 // 獲取特定提供者
-const ethProvider = this.providerFactory.getProvider(BlockchainType.ETHEREUM);
+const ethProvider = this.providerFactory.getProvider(ChainName.ETHEREUM);
 // 或使用便捷方法
 const ethProvider = this.providerFactory.getEthereumProvider();
 
 // 獲取特定提供者類型
 const alchemyProvider = this.providerFactory.getProvider(
-  BlockchainType.ETHEREUM,
+  ChainName.ETHEREUM,
   ProviderType.ALCHEMY
 );
 ```
@@ -177,7 +177,7 @@ export enum NetworkType {
 在 [blockchain-types.ts](mdc:src/providers/constants/blockchain-types.ts) 中添加新類型：
 
 ```typescript
-export enum BlockchainType {
+export enum ChainName {
   ETHEREUM = 'ethereum',
   SOLANA = 'solana',
   YOUR_BLOCKCHAIN = 'your_blockchain',
@@ -202,7 +202,7 @@ export enum ProviderType {
 
 ```typescript
 @Provider({
-  blockchainType: BlockchainType.YOUR_BLOCKCHAIN,
+  blockchainType: ChainName.YOUR_BLOCKCHAIN,
   providerType: ProviderType.YOUR_PROVIDER,
 })
 @Injectable()
