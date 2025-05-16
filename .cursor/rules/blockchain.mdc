@@ -5,7 +5,7 @@ alwaysApply: false
 ---
 # 區塊鏈服務模組
 
-本專案實現了一個模組化的區塊鏈服務架構，通過統一介面支援多種區塊鏈。`src/chains` 目錄包含核心業務邏輯和區塊鏈操作模組。
+本專案實現了一個模組化的區塊鏈服務架構，通過統一介面支援多種區塊鏈。`src/chains` 目錄包含核心業務邏輯和區塊鏈操作模組。系統支援主網和測試網，並使用 chainId 來區分不同網路。
 
 ## 架構概述
 
@@ -17,9 +17,10 @@ alwaysApply: false
 4. **EVM 抽象基類**：[AbstractEvmChainService](mdc:src/chains/services/core/abstract-evm-chain.service.ts) 提供 EVM 鏈共享邏輯
 5. **工廠模式**：[ChainServiceFactory](mdc:src/chains/services/core/chain-service.factory.ts) 管理服務實例
 6. **裝飾器註冊**：使用 [@Chain](mdc:src/chains/decorators/chain.decorator.ts) 裝飾器自動發現和註冊服務
-7. **攔截器機制**：使用 [BlockchainProviderInterceptor](mdc:src/chains/interceptors/blockchain-provider.interceptor.ts) 處理提供者選擇
-8. **請求級提供者**：使用 [UseBlockchainProvider](mdc:src/chains/decorators/blockchain-provider.decorator.ts) 裝飾器設定提供者
-9. **錯誤處理**：使用 [ErrorCode](mdc:src/common/constants/error-codes.ts) 和自定義異常提供統一錯誤處理
+7. **鏈路由系統**：使用 [ChainRouter](mdc:src/chains/services/core/chain-router.service.ts) 根據 chainId 動態路由請求
+8. **攔截器機制**：使用 [BlockchainProviderInterceptor](mdc:src/chains/interceptors/blockchain-provider.interceptor.ts) 處理提供者選擇
+9. **請求級提供者**：使用 [UseBlockchainProvider](mdc:src/chains/decorators/blockchain-provider.decorator.ts) 裝飾器設定提供者
+10. **錯誤處理**：使用 [ErrorCode](mdc:src/common/constants/error-codes.ts) 和自定義異常提供統一錯誤處理
 
 ## 目錄結構
 
@@ -38,6 +39,7 @@ src/chains/
 │   │   ├── abstract-chain.service.ts # 抽象鏈服務基類
 │   │   ├── abstract-evm-chain.service.ts # EVM鏈服務基類
 │   │   ├── chain-service.factory.ts  # 鏈服務工廠
+│   │   ├── chain-router.service.ts   # 鏈路由服務
 │   │   ├── discovery.service.ts      # 裝飾器發現服務
 │   │   ├── blockchain.service.ts     # 區塊鏈服務
 │   │   └── request-context.service.ts # 請求上下文服務
@@ -49,6 +51,9 @@ src/chains/
 │   │   └── bsc.service.ts
 │   └── solana/                     # Solana 服務
 │       └── solana.service.ts
+├── controllers/                    # 控制器
+│   ├── chains.controller.ts        # 鏈資訊控制器
+│   └── chain-id.controller.ts      # 基於鏈ID的API控制器
 ├── constants/                      # 常量定義
 │   ├── index.ts                    # 鏈相關常量
 │   └── evm-chains.ts               # EVM鏈元數據定義
@@ -62,48 +67,48 @@ src/chains/
 
 ### 非 EVM 鏈
 - **Solana** (SOL)：完整支援地址驗證、交易查詢、餘額查詢
+  - 主網
+  - 測試網 (Devnet)
 
 ### EVM 鏈
 - **以太坊** (ETH)：完整支援地址驗證、交易查詢、餘額查詢
+  - 主網 (chainId: 1)
+  - 測試網 Goerli (chainId: 5)
+  - 測試網 Sepolia (chainId: 11155111)
 - **Polygon** (POLY/MATIC)：完整支援地址驗證、交易查詢、餘額查詢
+  - 主網 (chainId: 137)
+  - 測試網 Mumbai (chainId: 80001)
 - **BSC** (BNB Smart Chain)：完整支援地址驗證、交易查詢、餘額查詢
+  - 主網 (chainId: 56)
+  - 測試網 (chainId: 97)
 
-## EVM 多鏈支持設計
+## 多網一服務架構設計
 
-系統使用抽象層和集中式元數據管理來實現可擴展的 EVM 多鏈支持：
+系統實現了多網一服務的架構設計，使同一服務可以同時處理主網和測試網請求：
 
-### 1. 抽象化設計
+### 1. Chain 裝飾器改進
 
-- **抽象 EVM 服務基類**：[AbstractEvmChainService](mdc:src/chains/services/core/abstract-evm-chain.service.ts) 提供所有 EVM 鏈共享的邏輯
-- **極簡子類實現**：每條 EVM 鏈只需實現 `evmKey()` 和 `getTestnetChainId()` 方法
-- **統一實現**：地址驗證、餘額查詢等都統一在基類中實現，確保一致性
+- **多參數支持**：`@Chain(mainnet, ...testnets)` 允許指定主網和測試網
+- **全局映射**：`GLOBAL_CHAIN_SERVICE_MAP` 記錄所有鏈服務和對應網路
+- **自動註冊**：使用裝飾器元數據同時註冊主網和測試網服務
 
-### 2. 元數據集中管理
+### 2. 基於 chainId 的路由系統
 
-- **元數據表**：[evm-chains.ts](mdc:src/chains/constants/evm-chains.ts) 中定義了 EVM 鏈的元數據
-- **元數據結構**：`EvmChainMeta` 包含 chainId、名稱、顯示名、代幣符號和小數位數
-- **靈活擴展**：只需添加新的鏈信息到 `EVM_CHAINS` 對象即可支持更多 EVM 鏈
+- **動態路由**：`ChainRouter` 服務根據 chainId 將請求分發到對應鏈服務
+- **鏈切換**：`setChainId()` 方法允許動態切換當前網路
+- **網路識別**：所有 EVM 服務通過 `currentChainId` 識別當前網路
 
-```typescript
-// EVM鏈元數據定義示例
-export const EVM_CHAINS: Record<string, EvmChainMeta> = {
-  ETH: { chainId: 1, name: 'ethereum', display: 'Ethereum', symbol: 'ETH', decimals: 18 },
-  POLY: { chainId: 137, name: 'polygon', display: 'Polygon', symbol: 'MATIC', decimals: 18 },
-  BSC: { chainId: 56, name: 'bsc', display: 'BNB Smart Chain', symbol: 'BNB', decimals: 18 },
-};
-```
+### 3. EVM 服務改進
 
-### 3. 提供者工廠升級
+- **抽象基類更新**：移除 `isTestnet` 標誌，改用 `currentChainId` 屬性
+- **提供者工廠升級**：`ProviderFactory.getEvmProvider(chainId)` 基於 chainId 獲取提供者
+- **元數據增強**：`CHAIN_INFO_MAP` 擴展包含所有主網和測試網資訊
 
-- **統一 EVM 提供者獲取**：`getEvmProvider(chainId, providerType)` 方法通過 chainId 獲取對應的提供者
-- **鏈 ID 映射**：自動將 chainId 映射到對應的區塊鏈類型
-- **API 共享**：同一 API Key 可用於多鏈查詢（例如 Alchemy 支持 ETH/POLY 等鏈）
+### 4. API 端點增強
 
-### 4. 環境變數控制
-
-- **選擇性啟用**：使用 `ENABLE_CHAINS` 環境變量控制啟用的鏈（格式：`ENABLE_CHAINS=ETH,POLY,BSC`）
-- **配置定義**：在 [blockchain.config.ts](mdc:src/config/blockchain.config.ts) 中處理環境變量
-- **動態註冊**：在 ChainsModule 中根據配置動態啟用對應的鏈服務
+- **基於 chainId 的 API**：`/v1/balances/:chainId/:address` 直接使用 chainId 路由
+- **網路參數**：原有 API 支援 `network` 和 `chainId` 查詢參數
+- **測試網過濾**：`include_testnet` 參數控制是否包含測試網資訊
 
 ## 使用方法
 
@@ -137,14 +142,13 @@ export class YourService {
   async someMethod() {
     // 使用鏈名稱
     const ethService = this.chainServiceFactory.getChainService(ChainName.ETHEREUM);
-    const polyService = this.chainServiceFactory.getChainService(ChainName.POLYGON);
 
-    // 也可使用代幣符號（不區分大小寫）
-    const solService = this.chainServiceFactory.getChainService('sol');
-    const bscService = this.chainServiceFactory.getChainService('bnb');
+    // 指定特定的chainId
+    ethService.setChainId(5); // 切換到 Goerli 測試網
 
     // 使用服務方法
     const isValid = ethService.isValidAddress('0x...');
+    const balance = await ethService.getBalances('0x...');
   }
 }
 ```
@@ -162,7 +166,9 @@ export class YourService {
   async someMethod() {
     // 獲取特定鏈的服務 - 會自動使用請求上下文中的提供者
     const ethereumService = this.blockchainService.getService('ethereum');
-    const polygonService = this.blockchainService.getService('polygon');
+
+    // 切換到特定chainId
+    ethereumService.setChainId(11155111); // 切換到 Sepolia 網路
 
     // 使用服務方法
     const isValid = ethereumService.isValidAddress('0x...');
@@ -171,9 +177,20 @@ export class YourService {
 }
 ```
 
-### 3. 指定區塊鏈提供者
+### 3. 使用基於 chainId 的 API
 
-使用 `@UseBlockchainProvider()` 裝飾器可以指定區塊鏈提供者：
+```
+# 指定chainId直接查詢
+GET /v1/balances/1/0x742d35Cc6634C0532925a3b844Bc454e4438f44e  # 以太坊主網
+GET /v1/balances/5/0x742d35Cc6634C0532925a3b844Bc454e4438f44e  # 以太坊 Goerli 測試網
+GET /v1/balances/137/0x742d35Cc6634C0532925a3b844Bc454e4438f44e  # Polygon 主網
+
+# 使用傳統API並指定網路參數
+GET /balances/ethereum/0x742d35Cc6634C0532925a3b844Bc454e4438f44e?network=testnet
+GET /balances/ethereum/0x742d35Cc6634C0532925a3b844Bc454e4438f44e?chainId=5
+```
+
+### 4. 指定區塊鏈提供者
 
 ```typescript
 import { Controller, Get, Param } from '@nestjs/common';
@@ -184,66 +201,65 @@ import { UseBlockchainProvider } from './chains/decorators/blockchain-provider.d
 export class BalanceController {
   constructor(private readonly balanceService: BalanceService) {}
 
-  @Get(':chain/:address')
+  @Get(':chainId/:address')
   @UseBlockchainProvider('quicknode') // 方法級別設置（優先）
-  getBalances(@Param('chain') chain: string, @Param('address') address: string) {
-    return this.balanceService.getPortfolio(chain, address);
+  getBalances(@Param('chainId') chainId: number, @Param('address') address: string) {
+    return this.balanceService.getBalanceByChainId(chainId, address);
   }
 }
 ```
 
-客戶端也可以通過查詢參數指定提供者：
-```
-GET /balances/ethereum/0x742d35Cc6634C0532925a3b844Bc454e4438f44e?provider=quicknode
-```
+## 餘額查詢 API（已更新）
 
-## 餘額查詢 API
-
-`BalanceQueryable` 介面提供了獲取區塊鏈地址餘額的能力：
+`BalanceQueryable` 介面已更新，使用 chainId 取代 useTestnet 參數：
 
 ```typescript
 export interface BalanceQueryable {
   /**
    * 獲取特定地址的餘額資訊
    * @param address 區塊鏈地址
-   * @param useTestnet 是否使用測試網絡，默認為 false
+   * @param chainId 鏈ID，用於指定網路
    * @param providerType 可選的提供者類型
    * @returns 包含餘額信息的對象
    */
-  getBalances(address: string, useTestnet?: boolean, providerType?: string): Promise<BalanceResponse>;
+  getBalances(address: string, chainId?: number, providerType?: string): Promise<BalanceResponse>;
 }
 ```
 
-所有餘額查詢返回統一的 `BalanceResponse` 格式，包含原生代幣、代幣和 NFT 資訊。
+## 添加新的鏈或測試網
 
-## API 端點
+添加新的 EVM 鏈或測試網需要以下步驟：
 
-鏈服務模組提供了以下 API 端點：
-
-- `GET /chains`: 獲取所有支持的鏈類型
-- `GET /chains/:chain/validate/:address`: 驗證地址是否有效
-- `GET /chains/:chain/transactions/:address`: 獲取地址的交易歷史
-- `GET /balances/:chain/:address`: 獲取地址的餘額資訊
-
-## 添加新的 EVM 鏈
-
-添加新的 EVM 鏈需要以下步驟：
-
-1. 在 [evm-chains.ts](mdc:src/chains/constants/evm-chains.ts) 中添加鏈元數據：
-
-```typescript
-export const EVM_CHAINS: Record<string, EvmChainMeta> = {
-  // 現有鏈...
-  ARBITRUM: { chainId: 42161, name: 'arbitrum', display: 'Arbitrum', symbol: 'ETH', decimals: 18 },
-};
-```
-
-2. 在 [constants/index.ts](mdc:src/chains/constants/index.ts) 中添加 ChainName：
+1. 在 `constants/index.ts` 中添加 ChainName：
 
 ```typescript
 export enum ChainName {
   // 現有鏈...
   ARBITRUM = 'arbitrum',
+  ARBITRUM_GOERLI = 'arbitrum_goerli',
+}
+```
+
+2. 在 `CHAIN_INFO_MAP` 中添加鏈元數據：
+
+```typescript
+export const CHAIN_INFO_MAP: Record<string, ChainInfo> = {
+  // 現有鏈...
+  [ChainName.ARBITRUM]: {
+    id: 42161,
+    name: ChainName.ARBITRUM,
+    isMainnet: true,
+    display: 'Arbitrum One',
+    coinSymbols: ['ETH'],
+  },
+  [ChainName.ARBITRUM_GOERLI]: {
+    id: 421613,
+    name: ChainName.ARBITRUM_GOERLI,
+    isMainnet: false,
+    mainnetRef: ChainName.ARBITRUM,
+    display: 'Arbitrum Goerli',
+    coinSymbols: ['ETH'],
+  },
 }
 ```
 
@@ -251,27 +267,8 @@ export enum ChainName {
 
 ```typescript
 @Injectable()
-@Chain(ChainName.ARBITRUM)
+@Chain(ChainName.ARBITRUM, ChainName.ARBITRUM_GOERLI)
 export class ArbitrumService extends AbstractEvmChainService {
-  constructor(
-    protected readonly configService: ConfigService,
-    providerFactory: ProviderFactory,
-  ) {
-    super(providerFactory);
-    const defaultProvider = this.configService.get<string>('blockchain.arbitrumProvider', 'alchemy');
-    this.setDefaultProvider(defaultProvider);
-  }
-
-  evmKey() {
-    return 'ARBITRUM';
-  }
-
-  protected getTestnetChainId() {
-    return 421613; // Arbitrum Goerli
-  }
+  // 實現必要方法...
 }
 ```
-
-4. 在 [ChainsModule](mdc:src/chains/chains.module.ts) 中註冊新服務
-
-詳細實作請參考 [README.md](mdc:README.md) 中的 EVM 多鏈支持部分。

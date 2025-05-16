@@ -9,13 +9,13 @@ import { ProviderFactory } from '../../../providers/provider.factory';
  * BSC(BNB Smart Chain)鏈服務
  */
 @Injectable()
-@Chain(ChainName.BSC)
+@Chain(ChainName.BSC, ChainName.BSC_TESTNET)
 export class BscService extends AbstractEvmChainService {
   constructor(
     protected readonly configService: ConfigService,
     providerFactory: ProviderFactory,
   ) {
-    super(providerFactory);
+    super(providerFactory, configService);
     // 設置默認提供者，可以從配置中獲取
     const defaultProvider = this.configService.get<string>('blockchain.bscProvider', 'alchemy');
     this.setDefaultProvider(defaultProvider);
@@ -29,9 +29,10 @@ export class BscService extends AbstractEvmChainService {
   }
 
   /**
-   * 獲取測試網ChainId
+   * 獲取預設的鏈ID
+   * 預設使用主網ID
    */
-  protected getTestnetChainId(): number {
-    return 97; // BSC Testnet
+  protected getDefaultChainId(): number {
+    return 56; // BSC主網
   }
 }

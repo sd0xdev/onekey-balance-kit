@@ -51,7 +51,7 @@ describe('EthereumService', () => {
 
   describe('getChainName', () => {
     it('應該返回以太坊鏈名稱', () => {
-      expect(service.getChainName()).toBe(ChainName.ETHEREUM);
+      expect(service.getChainName()).toBe('Ethereum');
     });
   });
 
@@ -183,7 +183,7 @@ describe('EthereumService', () => {
     });
 
     it('應該使用測試網絡獲取餘額', async () => {
-      await service.getBalances(address, true);
+      await service.getBalances(address, EthereumChainId.SEPOLIA);
 
       expect(mockProviderFactory.getEvmProvider).toHaveBeenCalledWith(
         EthereumChainId.SEPOLIA,
@@ -194,7 +194,7 @@ describe('EthereumService', () => {
 
     it('應該使用指定的提供者類型', async () => {
       const providerType = 'quicknode';
-      await service.getBalances(address, false, providerType);
+      await service.getBalances(address, EthereumChainId.MAINNET, providerType);
 
       expect(mockProviderFactory.getEvmProvider).toHaveBeenCalledWith(
         EthereumChainId.MAINNET,

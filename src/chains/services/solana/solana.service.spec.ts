@@ -172,18 +172,18 @@ describe('SolanaService', () => {
     });
 
     it('應該使用測試網絡獲取餘額', async () => {
-      await service.getBalances(address, true);
+      await service.getBalances(address, SolanaCluster.TESTNET as unknown as number);
 
       expect(mockSolanaProvider.getBalances).toHaveBeenCalledWith(address, NetworkType.TESTNET);
 
       // 檢查結果包含正確的集群
-      const result = await service.getBalances(address, true);
+      const result = await service.getBalances(address, SolanaCluster.TESTNET as unknown as number);
       expect(result.cluster).toBe(SolanaCluster.TESTNET);
     });
 
     it('應該使用指定的提供者類型', async () => {
       const providerType = 'quicknode';
-      await service.getBalances(address, false, providerType);
+      await service.getBalances(address, SolanaCluster.MAINNET as unknown as number, providerType);
 
       expect(mockProviderFactory.getProvider).toHaveBeenCalledWith(ChainName.SOLANA, providerType);
     });

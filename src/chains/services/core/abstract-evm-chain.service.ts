@@ -7,6 +7,7 @@ import { ProviderType } from '../../../providers/constants/blockchain-types';
 import { ChainCode, ChainName, EVM_CHAIN_INFO_MAP } from '../../constants';
 import { Injectable } from '@nestjs/common';
 import { CHAIN_INFO_MAP } from '../../../chains/constants';
+import { ConfigService } from '@nestjs/config';
 
 /**
  * 抽象EVM鏈服務
@@ -17,8 +18,16 @@ export abstract class AbstractEvmChainService
   extends AbstractChainService
   implements BalanceQueryable
 {
-  constructor(protected readonly providerFactory: ProviderFactory) {
+  // 當前鏈ID
+  protected currentChainId: number;
+
+  constructor(
+    protected readonly providerFactory: ProviderFactory,
+    protected readonly configService: ConfigService,
+  ) {
     super();
+    // 初始化為預設chainId
+    this.currentChainId = this.getDefaultChainId();
   }
 
   /**
@@ -26,6 +35,51 @@ export abstract class AbstractEvmChainService
    * 例如：ChainName.ETHEREUM, ChainName.POLYGON等
    */
   abstract evmChain(): ChainName;
+
+  /**
+   * 獲取預設的鏈ID
+   * 通常是主網的鏈ID，子類可以覆寫
+   */
+  protected getDefaultChainId(): number {
+    return this.meta?.id || 1;
+  }
+
+  /**
+   * 設置當前鏈ID
+   * @param chainId 當前鏈ID
+   */
+  setChainId(chainId: number): void {
+    this.currentChainId = chainId;
+    this.logInfo(`Current chain ID set to: ${chainId}`);
+  }
+
+  /**
+   * 獲取當前鏈ID
+   */
+  getChainId(): number {
+    return this.currentChainId;
+  }
+
+  /**
+   * 判斷當前是否為測試網
+   */
+  isTestnet(): boolean {
+    const chainInfo = this.getChainInfoByChainId(this.currentChainId);
+    return chainInfo ? !chainInfo.isMainnet : false;
+  }
+
+  /**
+   * 根據鏈ID獲取鏈資訊
+   * @param chainId 鏈ID
+   */
+  protected getChainInfoByChainId(chainId: number) {
+    for (const chainInfo of Object.values(CHAIN_INFO_MAP)) {
+      if (chainInfo.id === chainId) {
+        return chainInfo;
+      }
+    }
+    return null;
+  }
 
   /**
    * 獲取鏈元數據
@@ -38,13 +92,19 @@ export abstract class AbstractEvmChainService
    * 獲取鏈名稱
    */
   getChainName(): string {
-    return this.meta?.display || this.evmChain();
+    const chainInfo = this.getChainInfoByChainId(this.currentChainId);
+    return chainInfo ? chainInfo.display : this.meta?.display || this.evmChain();
   }
 
   /**
    * 獲取鏈代幣符號
    */
   getChainSymbol(): string {
+    // 先嘗試從chainId獲取
+    const chainInfo = this.getChainInfoByChainId(this.currentChainId);
+    if (chainInfo && EVM_CHAIN_INFO_MAP[chainInfo.name]) {
+      return EVM_CHAIN_INFO_MAP[chainInfo.name]?.symbol || '';
+    }
     return this.meta?.symbol || '';
   }
 
@@ -114,22 +174,31 @@ export abstract class AbstractEvmChainService
   /**
    * 獲取餘額資訊
    * @param address 區塊鏈地址
-   * @param useTestnet 是否使用測試網絡
+   * @param chainId 可選的鏈ID，如未指定則使用當前設定的鏈ID
    * @param providerType 提供者類型
    */
   async getBalances(
     address: string,
-    useTestnet = false,
+    chainId?: number,
     providerType?: string,
   ): Promise<BalanceResponse> {
     try {
-      this.logInfo(`Getting ${this.getChainName()} balances for ${address}`);
+      // 如果傳入 chainId，則設定當前 chainId
+      if (chainId !== undefined) {
+        this.setChainId(chainId);
+      }
+
+      this.logInfo(
+        `Getting ${this.getChainName()} balances for ${address} (chainId=${this.currentChainId})`,
+      );
+
       // 先驗證地址有效性
       if (!this.isValidAddress(address)) {
         throw new Error(`Invalid Ethereum address: ${address}`);
       }
 
-      const networkType = useTestnet ? NetworkType.TESTNET : NetworkType.MAINNET;
+      // 根據當前chainId判斷網絡類型
+      const networkType = this.isTestnet() ? NetworkType.TESTNET : NetworkType.MAINNET;
       this.logInfo(`Network: ${networkType}`);
 
       // 獲取提供者類型，按照優先級：
@@ -142,10 +211,9 @@ export abstract class AbstractEvmChainService
       this.logInfo(`Selected provider type: ${selectedProviderType}`);
 
       try {
-        // 從提供者工廠獲取對應鏈的提供者
-        // 使用新的getEvmProvider方法，傳入對應的chainId
+        // 從提供者工廠獲取對應鏈的提供者，使用當前chainId
         const provider = this.providerFactory.getEvmProvider(
-          useTestnet ? this.getTestnetChainId() : this.meta?.id || 0,
+          this.currentChainId,
           selectedProviderType,
         );
 
@@ -157,9 +225,9 @@ export abstract class AbstractEvmChainService
 
           // 將提供者的響應轉換為標準響應格式
           return {
-            chainId: useTestnet ? this.getTestnetChainId() : this.meta?.id || 0,
+            chainId: this.currentChainId,
             nativeBalance: {
-              symbol: this.meta?.symbol || 'UNKNOWN',
+              symbol: this.getChainSymbol() || 'UNKNOWN',
               decimals: this.meta?.decimals || 18,
               balance: balancesResponse.nativeBalance.balance,
               usd: 0, // 可以從其他服務獲取價格
@@ -193,9 +261,9 @@ export abstract class AbstractEvmChainService
       this.logInfo('Using default implementation for balances');
       await new Promise((resolve) => setTimeout(resolve, 10));
       return {
-        chainId: useTestnet ? this.getTestnetChainId() : this.meta?.id || 0,
+        chainId: this.currentChainId,
         nativeBalance: {
-          symbol: this.meta?.symbol || 'UNKNOWN',
+          symbol: this.getChainSymbol() || 'UNKNOWN',
           decimals: this.meta?.decimals || 18,
           balance: '1000000000000000000', // 1 單位
           usd: 0,
@@ -209,35 +277,5 @@ export abstract class AbstractEvmChainService
       this.logError(`Failed to get ${this.getChainName()} balances: ${errorMessage}`);
       throw error;
     }
-  }
-
-  /**
-   * 獲取測試網的ChainID
-   * 這是一個輔助方法，可被子類覆寫
-   */
-  protected getTestnetChainId(): number {
-    const currentChain = this.evmChain();
-
-    // 檢查當前鏈是否有對應的測試網在 CHAIN_INFO_MAP 中
-    for (const [chainKey, chainInfo] of Object.entries(CHAIN_INFO_MAP)) {
-      if (
-        !chainInfo.isMainnet && // 是測試網
-        chainInfo.mainnetRef === currentChain && // 參照的主網是當前鏈
-        chainInfo.id
-      ) {
-        // 有有效的 id
-        return chainInfo.id;
-      }
-    }
-
-    // 如果在 CHAIN_INFO_MAP 中找不到，使用預設值
-    const testnetMap: Partial<Record<ChainName, number>> = {
-      [ChainName.ETHEREUM]: CHAIN_INFO_MAP[ChainName.ETHEREUM_SEPOLIA].id, // Sepolia
-      [ChainName.POLYGON]: 80001, // Mumbai
-      [ChainName.BSC]: 97, // BSC Testnet
-      [ChainName.SOLANA]: 103, // Solana Devnet
-    };
-
-    return testnetMap[currentChain] || 0;
   }
 }

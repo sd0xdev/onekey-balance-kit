@@ -9,13 +9,13 @@ import { ProviderFactory } from '../../../providers/provider.factory';
  * Polygon鏈服務
  */
 @Injectable()
-@Chain(ChainName.POLYGON)
+@Chain(ChainName.POLYGON, ChainName.POLYGON_MUMBAI)
 export class PolygonService extends AbstractEvmChainService {
   constructor(
     protected readonly configService: ConfigService,
     providerFactory: ProviderFactory,
   ) {
-    super(providerFactory);
+    super(providerFactory, configService);
     // 設置默認提供者，可以從配置中獲取
     const defaultProvider = this.configService.get<string>('blockchain.polygonProvider', 'alchemy');
     this.setDefaultProvider(defaultProvider);
@@ -29,9 +29,10 @@ export class PolygonService extends AbstractEvmChainService {
   }
 
   /**
-   * 獲取測試網ChainId
+   * 獲取預設的鏈ID
+   * 預設使用主網ID
    */
-  protected getTestnetChainId(): number {
-    return 80001; // Mumbai Testnet
+  protected getDefaultChainId(): number {
+    return 137; // Polygon主網
   }
 }

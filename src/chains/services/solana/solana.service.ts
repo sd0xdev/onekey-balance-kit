@@ -45,9 +45,11 @@ export interface SolanaBalancesResponse extends BalanceResponse {
 }
 
 @Injectable()
-@Chain(ChainName.SOLANA)
+@Chain(ChainName.SOLANA, ChainName.SOLANA_DEVNET)
 export class SolanaService extends AbstractChainService implements BalanceQueryable {
   protected readonly chainType = 'solana';
+  // 當前chainId，預設為主網101
+  protected currentChainId: number = 101;
 
   constructor(
     protected readonly providerFactory: ProviderFactory,
@@ -59,7 +61,37 @@ export class SolanaService extends AbstractChainService implements BalanceQuerya
     this.setDefaultProvider(defaultProvider);
   }
 
+  /**
+   * 設置當前使用的chainId
+   * @param chainId 鏈ID
+   */
+  setChainId(chainId: number): void {
+    this.currentChainId = chainId;
+    this.logInfo(`Current Solana chain ID set to: ${chainId}`);
+  }
+
+  /**
+   * 獲取當前使用的chainId
+   */
+  getChainId(): number {
+    return this.currentChainId;
+  }
+
+  /**
+   * 判斷是否為測試網
+   */
+  isTestnet(): boolean {
+    // 主網是101，其他都視為測試網
+    return this.currentChainId !== 101;
+  }
+
   getChainName(): string {
+    // 根據當前chainId返回適當的名稱
+    if (this.currentChainId === 103) {
+      return 'Solana Devnet';
+    } else if (this.currentChainId === 102) {
+      return 'Solana Testnet';
+    }
     return ChainName.SOLANA;
   }
 
@@ -101,15 +133,24 @@ export class SolanaService extends AbstractChainService implements BalanceQuerya
 
   async getBalances(
     address: string,
-    useTestnet = false,
+    chainId?: number,
     providerType?: string,
   ): Promise<SolanaBalancesResponse> {
     try {
-      this.logInfo(`Getting Solana balances for ${address}`);
+      // 如果傳入chainId，設定當前chainId
+      if (chainId !== undefined) {
+        this.setChainId(chainId);
+      }
+
+      this.logInfo(`Getting Solana balances for ${address} (chainId=${this.currentChainId})`);
+
       // 先驗證地址有效性
       if (!this.isValidAddress(address)) {
         throw new Error(`Invalid Solana address: ${address}`);
       }
+
+      // 使用類的isTestnet方法判斷網絡類型
+      const useTestnet = this.isTestnet();
 
       // 使用傳入的參數確定使用哪個集群
       const cluster = useTestnet ? SolanaCluster.TESTNET : SolanaCluster.MAINNET;
@@ -221,7 +262,7 @@ export class SolanaService extends AbstractChainService implements BalanceQuerya
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logError(`Failed to get Solana balances: ${errorMessage}`);
       return {
-        cluster: useTestnet ? SolanaCluster.TESTNET : SolanaCluster.MAINNET,
+        cluster: this.isTestnet() ? SolanaCluster.TESTNET : SolanaCluster.MAINNET,
         nativeBalance: {
           symbol: SOL_SYMBOL,
           decimals: SOL_DECIMALS,
