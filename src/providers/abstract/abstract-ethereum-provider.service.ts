@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AbstractProviderService } from './abstract-provider.service';
+import { AbstractEvmProviderService } from './abstract-evm-provider.service';
 import {
   EthereumProviderInterface,
   EthereumTransactionRequest,
@@ -9,29 +9,24 @@ import {
   ChainConfig,
   NetworkType,
 } from '../interfaces/blockchain-provider.interface';
-import { isAddress, formatEther, parseEther } from 'ethers';
+import { ChainName } from '../../chains/constants';
 
 /**
- * 以太坊區塊鏈提供者的抽象基類
+ * 以太坊區塊鏈提供者的抽象基類 (向後兼容)
  * 實現以太坊提供者介面的共用功能
+ * 現在繼承自 AbstractEvmProviderService 以重用邏輯
  */
 @Injectable()
 export abstract class AbstractEthereumProviderService
-  extends AbstractProviderService
+  extends AbstractEvmProviderService
   implements EthereumProviderInterface
 {
   /**
    * 獲取以太坊區塊鏈配置
+   * 轉發到父類的 getChainConfig
    */
   getChainConfig(): ChainConfig {
-    return {
-      chainId: 1, // Ethereum mainnet
-      name: 'Ethereum',
-      nativeSymbol: 'ETH',
-      nativeDecimals: 18,
-      testnetChainId: 11155111, // Sepolia testnet
-      testnetName: 'Sepolia',
-    };
+    return super.getChainConfig(ChainName.ETHEREUM);
   }
 
   /**
@@ -88,31 +83,11 @@ export abstract class AbstractEthereumProviderService
 
   /**
    * 驗證以太坊地址有效性
-   * 使用 ethers 的 isAddress 函數進行驗證
+   * 使用父類的 validateEvmAddress
    * @param address 以太坊地址
    * @returns 地址是否有效
    */
   protected validateEthereumAddress(address: string): boolean {
-    return isAddress(address);
-  }
-
-  /**
-   * 格式化 Wei 到 ETH
-   * 使用 ethers 的 formatEther 函數
-   * @param weiAmount Wei 金額
-   * @returns ETH 金額字串
-   */
-  protected weiToEth(weiAmount: string): string {
-    return formatEther(weiAmount);
-  }
-
-  /**
-   * 格式化 ETH 到 Wei
-   * 使用 ethers 的 parseEther 函數
-   * @param ethAmount ETH 金額
-   * @returns Wei 金額字串
-   */
-  protected ethToWei(ethAmount: string): string {
-    return parseEther(ethAmount).toString();
+    return this.validateEvmAddress(address);
   }
 }
