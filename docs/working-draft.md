@@ -39,23 +39,27 @@ Client  │ GET /v1/balances             ┌──────────┐
 
 ## 2. 資料源選擇
 
-| **鏈**       | **推薦供應商**     | **為什麼選它**                                                            | **關鍵 API／功能**                     |
+#### 1. 主要鏈與推薦供應商
+
+| 鏈           | 推薦供應商         | 為什麼選它                                                                | 關鍵 API／功能                         |
 | ------------ | ------------------ | ------------------------------------------------------------------------- | -------------------------------------- |
-| **Ethereum** | **Alchemy (EVM)**  | `getTokenBalances` + `getNftsForOwner` 一行搞定；Address Activity Webhook | Token/NFT API, Webhook                 |
-| **Solana**   | **Alchemy Solana** | 同家服務，介面類似；單呼叫拿 SOL + SPL Token + NFT，並支援 Webhook        | `balances`, `getNFTs`, Address Webhook |
+| **Ethereum** | **Alchemy (EVM)**  | `getTokenBalances` + `getNftsForOwner` 一行搞定；Address Activity Webhook | Token／NFT API、Webhook                |
+| **Solana**   | **Alchemy Solana** | 同家服務、介面類似；單呼叫拿 SOL + SPL Token + NFT，並支援 Webhook        | `balances`、`getNFTs`、Address Webhook |
 
-> **MVP 策略** — 同一個 Alchemy 帳號開兩把 Key（ETH vs SOL），共享免費額度 100 M CU/月；日活 > 5 k 再考慮升級 Pay‑Go 或自架節點。
+> **MVP 策略** — 同一個 Alchemy 帳號開兩把 Key（ETH vs SOL），共用 100 M CU/月 免費額度；日活 > 5 k 再考慮升級 Pay-Go 或自架節點。
 
-| **評比面向**                                   | **DeBank OpenAPI**                                                                                                                                                                                                                    | **OKX Wallet API**                                                                                                                                                                                                                         | \***\*Alchemy**<br/>（RPC＋Token/NFT API＋Webhooks）\*\*                                                                      | \***\*純 JSON-RPC**<br/>（自架或代管）\*\*                                                                  | \***\*自建索引中心**<br/>（全節點＋Indexer ╱ ETL）\*\*                                |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | --- |
-| **覆蓋範圍** <br/><br/>（多鏈 / ERC-20 / NFT） | ✅ 100+ 鏈、ERC20+NFT，一次打包 [docs.cloud.debank.com](https://docs.cloud.debank.com/en/readme/api-pro-reference/user?utm_source=chatgpt.com)[docs.cloud.debank.com](https://docs.cloud.debank.com/en/readme/api-pro-reference/user) | ✅ 多鏈含 BTC Inscription 系 [OKX](https://www.okx.com/web3/build/docs/waas/walletapi-api-all-token-balances-by-address?utm_source=chatgpt.com)[OKX](https://www.okx.com/web3/build/docs/waas/walletapi-api-all-token-balances-by-address) | ⚠️ EVM 鏈；ERC-20 + ERC-721/1155（NFT Gallery）[Alchemy](https://www.alchemy.com/pricing?utm_source=chatgpt.com)              | ❌ 只能查單鏈；NFT 需額外 call                                                                              | ✅ 想抓什麼就抓什麼，完全自由                                                         |
-| **資料新鮮度 / Latency**                       | ⚠️ 每 10–60 s 聚合，同步頻率不透明                                                                                                                                                                                                    | ⚠️ 官方號稱 < 1 block，實測 5–15 s                                                                                                                                                                                                         | ✅ 直接 latest block；Webhook < 2 s [Alchemy](https://www.alchemy.com/webhooks?utm_source=chatgpt.com)                        | ✅ 跟區塊同步；自架最快 < 1 s                                                                               | ✅ 事件流即時寫庫，可做到 < 1 s                                                       |
-| **推送機制** <br/><br/>（主動通知帳變）        | ❌ 無；需輪詢                                                                                                                                                                                                                         | ❌ 無；需輪詢                                                                                                                                                                                                                              | ✅ Address Activity / Custom Webhook                                                                                          | ⚠️ 要自己訂閱 `eth_subscribe` 或輪詢                                                                        | ✅ 自己決定：Kafka / WebSocket / MQ                                                   |
-| **開發便利**                                   | ✅ 一條 REST 拿完                                                                                                                                                                                                                     | ✅ 類似；文件清楚                                                                                                                                                                                                                          | ✅ SDK + Dashboard，幾行就跑                                                                                                  | ⚠️ 需列白名單，手動打 `balanceOf` / `eth_call`                                                              | ❌ 開發＋維運成本最大                                                                 |
-| **併發&流量上限**                              | ⚠️ 單 AccessKey 典型 50–150 QPS（依配額）                                                                                                                                                                                             | ⚠️ 1000 req/min ；再上去需申請                                                                                                                                                                                                             | ✅ 免費 tier 25 RPS；100 M CU/月[Alchemy](https://www.alchemy.com/pricing?utm_source=chatgpt.com)                             | 取決於節點服務商；自架 QPS 無上限                                                                           | ✅ 取決於基礎設計與機器規模                                                           |
-| **費用**                                       | 免費試用＋按「Units」計價；大約 US$0.5 – 1/10 k req [docs.cloud.debank.com](https://docs.cloud.debank.com/en/readme/auxiliary-feature/units)                                                                                          | 目前免費，僅需 API Key；未公佈商業價                                                                                                                                                                                                       | 免費→Pay-as-you-go US$5 起 / 11 M CU；高階 tier US$199+ /月 [Alchemy](https://www.alchemy.com/pricing?utm_source=chatgpt.com) | \- 代管節點：US$49 – 299 /月 <br/><br/>- 自架：SSD 1 TB + 16 GB RAM ≈ US$100 /月（硬體 & 雲） quicknode.com | \- 全節點 × N 鏈 + 儲存 <br/><br/>- Indexer/ETL → 人力 + 叢集；月 burn 4–5 位數美金起 |
-| **可擴展 / Vendor Lock-in**                    | ⚠️ 只能用 DeBank；不可自訂指標                                                                                                                                                                                                        | ⚠️ 綁 OKX　但跨鏈多                                                                                                                                                                                                                        | ✅ 同時給原始 RPC，可隨時換家                                                                                                 | ✅ 完全中立                                                                                                 | ✅ 自己的數據倉，最自由                                                               |
-| **綜合評語**                                   | **極快上線 & 多鏈**，但配額 + 鎖                                                                                                                                                                                                      | **跨鏈最廣**，適合錢包場景，仍有 rate-limit                                                                                                                                                                                                | **最佳折衷**：低門檻、Webhook 秒級、易橫向                                                                                    | **成本最低**，但寫程式最麻煩；多地址×多 Token 時延遲高                                                      | **長期終極形態**；早期不划算                                                          |     |
+#### 2. 服務比較
+
+| 評比面向                        | DeBank OpenAPI                            | OKX Wallet API                       | **Alchemy**<br>(RPC＋Token/NFT API＋Webhooks) | **純 JSON-RPC**<br>(自架或代管)                             | **自建索引中心**<br>(全節點＋Indexer╱ETL)   |
+| ------------------------------- | ----------------------------------------- | ------------------------------------ | --------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------- |
+| 覆蓋範圍<br>(多鏈／ERC-20／NFT) | ✅ 100+ 鏈，ERC-20 + NFT，一次打包        | ✅ 多鏈含 BTC Inscription 系         | ⚠️ 僅 EVM 鏈，ERC-20 + ERC-721/1155           | ❌ 只能單鏈；NFT 需額外呼叫                                 | ✅ 想抓什麼就抓什麼，完全自由               |
+| 資料新鮮度／Latency             | ⚠️ 聚合每 10–60 s，同步頻率不透明         | ⚠️ 官方 < 1 block，實測 5–15 s       | ✅ latest block；Webhook < 2 s                | ✅ 跟區塊同步；自架最快 < 1 s                               | ✅ 事件流即時寫庫，可做到 < 1 s             |
+| 推送機制<br>(主動通知帳變)      | ❌ 無；需輪詢                             | ❌ 無；需輪詢                        | ✅ Address Activity／Custom Webhook           | ⚠️ 自行 `eth_subscribe` 或輪詢                              | ✅ Kafka／WebSocket／MQ                     |
+| 開發便利                        | ✅ 一條 REST 全拿                         | ✅ 類似；文件清楚                    | ✅ SDK + Dashboard，幾行就跑                  | ⚠️ 要列白，手動 `balanceOf`／`eth_call`                     | ❌ 開發＋維運成本最大                       |
+| 併發＆流量上限                  | ⚠️ 單 Key 典型 50–150 QPS                 | ⚠️ 1000 req/min，再高需申請          | ✅ 免費 25 RPS；100 M CU/月                   | 取決於節點服務商；自架無上限                                | ✅ 看機器與架構                             |
+| 費用                            | 免費試用＋按 Units 計價；約 US$0.5–1/10 k | 目前免費；僅需 API Key               | 免費→Pay-go US$5 起／11 M CU；高階 US$199+/月 | 代管節點 US$49–299/月；自架 SSD 1 TB＋16 GB RAM ≈ US$100/月 | 全節點×N 鏈＋Indexer → 月燒四、五位數美金起 |
+| 可擴展／Vendor Lock-in          | ⚠️ 只能用 DeBank，不能自訂指標            | ⚠️ 綁 OKX，但跨鏈多                  | ✅ 同時給 raw RPC，可隨時換家                 | ✅ 完全中立                                                 | ✅ 自己的資料倉，最自由                     |
+| 綜合評語                        | **極快上線 & 多鏈**，但配額＋鎖           | **跨鏈最廣**，適合錢包場景，仍有限流 | **最佳折衷**：Webhook 秒級、易橫向            | **成本最低**，但程式碼最苦手                                | **終極形態**；早期不划算                    |
 
 ---
 
@@ -169,52 +173,9 @@ const { nativeBalance, tokens, nfts } =
 
 Redis Upstash ≤ 10 K Cmd/月免費；Mongo Atlas M0 免費。超量後以 PAYG 計。
 
----
-
-## 7. `src/` 目錄
-
-```other
-src/
-├─ main.ts & app.module.ts
-│
-├─ core/
-│   ├─ balance/
-│   ├─ cache/
-│   └─ db/
-│
-├─ chains/
-│   ├─ ethereum/
-│   └─ solana/
-│
-├─ providers/
-│   ├─ alchemy/
-│   └─ rpc/
-│
-└─ webhook/
-```
-
----
-
-## 8. 環境變數
-
-```other
-ALCHEMY_API_KEY_ETH=xxxxxxxx
-ALCHEMY_API_KEY_SOL=yyyyyyyy
-REDIS_URL=redis://……
-MONGO_URL=mongodb+srv://……
-```
-
----
-
-## 9. Roadmap
+## 7. Roadmap
 
 - ETH Mainnet MVP
 - Solana 上線
 - Arbitrum / Optimism 插件
 - 前端 Dashboard (Next.js + shadcn/ui)
-
----
-
-## 10. License
-
-MIT © 2025 SD0
