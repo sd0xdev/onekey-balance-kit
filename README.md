@@ -1,6 +1,7 @@
 # OneKeyBalanceKit
 
 [![CI](https://github.com/sd0xdev/onekey-balance-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/sd0xdev/onekey-balance-kit/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/sd0xdev/onekey-balance-kit/branch/main/graph/badge.svg)](https://codecov.io/gh/sd0xdev/onekey-balance-kit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-22.x-brightgreen.svg)](https://nodejs.org/)
 [![NestJS](https://img.shields.io/badge/NestJS-11.x-red.svg)](https://nestjs.com/)
@@ -37,7 +38,7 @@
 - **高可用與可擴展**：微服務架構，支持水平擴展
 - **完整類型支持**：使用 TypeScript 開發，100% 類型覆蓋
 - **完善的錯誤處理**：標準化的錯誤碼與提示信息
-- **全面的測試覆蓋**：單元測試、集成測試、E2E 測試
+- **全面的測試覆蓋**：單元測試與完整的覆蓋率報告
 
 ## 🔄 技術架構
 
@@ -280,10 +281,9 @@ npm run test
 
 # 運行帶覆蓋率報告的測試
 npm run test:cov
-
-# 運行 E2E 測試
-npm run test:e2e
 ```
+
+> **注意**：E2E 測試目前已從持續整合流程中移除，將在專案穩定後再次啟用。
 
 ### CI/CD 流程
 
@@ -291,7 +291,6 @@ npm run test:e2e
 
 - **代碼檢查**：ESLint + Prettier
 - **單元測試**：Jest
-- **集成測試**：帶測試容器的 NestJS 測試
 - **構建檢查**：驗證構建成功
 - **Docker 鏡像構建**：用於部署
 
@@ -555,6 +554,33 @@ rm test-generated.yaml
 - 減少重複配置的風險
 - 更容易擴展到新環境
 
+## 📊 測試覆蓋率
+
+本專案致力於維持高質量的測試覆蓋率，包括單元測試和端對端測試：
+
+- **單元測試**：涵蓋所有服務、控制器和工具類的功能測試
+- **端對端測試**：確保 API 端點的正確功能與響應
+- **覆蓋率報告**：每次 CI 運行時自動生成並上傳到 Codecov
+
+### 運行測試
+
+```bash
+# 運行單元測試
+pnpm test
+
+# 運行單元測試並生成覆蓋率報告
+pnpm test:cov
+```
+
+### 覆蓋率報告解讀
+
+- **查看本地報告**：運行測試並生成覆蓋率報告後，可在 `coverage/unit/lcov-report/index.html` 中查看詳細報告
+- **CI 平台報告**：每次提交後，GitHub Actions 會自動運行測試並將結果上傳至 Codecov
+- **覆蓋率目標**：我們的目標是維持至少 80% 的總體代碼覆蓋率
+
+> **注意**：目前測試覆蓋率報告僅包含單元測試，E2E 測試覆蓋率報告將在後續版本中添加。
+
 ---
 
 <p align="center">Made with ❤️ by <a href="https://github.com/sd0xdev">SD0</a></p>
+```
