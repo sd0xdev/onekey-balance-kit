@@ -16,6 +16,11 @@ export enum NotificationEventType {
   PORTFOLIO_REDIS_UPDATED = 'portfolio.redis.updated',
 }
 
+// 添加快取失效事件類型
+export enum CacheInvalidationEventType {
+  ADDRESS_CACHE_INVALIDATED = 'cache.address.invalidated',
+}
+
 // 通知事件基類
 export class NotificationEvent {
   constructor(
@@ -94,6 +99,16 @@ export class PortfolioRedisUpdatedEvent extends NotificationEvent {
   ) {
     super(NotificationEventType.PORTFOLIO_REDIS_UPDATED);
   }
+}
+
+// 添加快取失效事件資料結構
+export interface AddressCacheInvalidatedEvent {
+  chain: ChainName;
+  chainId: number;
+  address: string;
+  cacheKey: string;
+  cachePattern: string;
+  timestamp: number;
 }
 
 @Injectable()
@@ -189,6 +204,44 @@ export class NotificationService {
     );
     this.logger.debug(`Emitting portfolio Redis updated event: ${chain}:${chainId}:${address}`);
     this.eventEmitter.emit(NotificationEventType.PORTFOLIO_REDIS_UPDATED, event);
+  }
+
+  /**
+   * 發出地址快取失效事件
+   * @param chain 鏈名稱
+   * @param chainId 鏈ID
+   * @param address 地址
+   */
+  async emitAddressCacheInvalidated(
+    chain: ChainName,
+    chainId: number,
+    address: string,
+  ): Promise<void> {
+    // 創建完整的緩存鍵和模式，使用正確的前綴 "portfolio:"
+    const cacheKey = `portfolio:${chain}:${chainId}:${address}`;
+    const cachePattern = `portfolio:${chain}:${chainId}:${address}*`;
+
+    const cacheInvalidationEvent: AddressCacheInvalidatedEvent = {
+      chain,
+      chainId,
+      address,
+      cacheKey,
+      cachePattern,
+      timestamp: Date.now(),
+    };
+
+    this.logger.debug(
+      `準備發送快取失效事件: ${cacheKey}, 事件類型: ${CacheInvalidationEventType.ADDRESS_CACHE_INVALIDATED}`,
+    );
+
+    await this.eventEmitter.emitAsync(
+      CacheInvalidationEventType.ADDRESS_CACHE_INVALIDATED,
+      cacheInvalidationEvent,
+    );
+
+    this.logger.debug(
+      `已發送快取失效事件: ${chain}:${chainId}:${address}, 時間戳: ${cacheInvalidationEvent.timestamp}`,
+    );
   }
 
   // 監聽 NFT 活動事件並處理

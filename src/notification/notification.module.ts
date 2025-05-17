@@ -4,7 +4,11 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 
 @Global()
 @Module({
-  imports: [EventEmitterModule.forRoot()],
+  imports: [
+    EventEmitterModule.forRoot({
+      global: true,
+    }),
+  ],
   providers: [NotificationService],
   exports: [NotificationService],
 })

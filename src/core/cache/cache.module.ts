@@ -49,6 +49,7 @@ interface CustomCacheOptions {
             const redisKeyv = createKeyv(redisUrl, {
               useUnlink: true, // 使用 UNLINK 代替 DEL，性能更好
               clearBatchSize: 1000, // 批量刪除時的批次大小
+              namespace: 'app', // 增加命名空間，避免與其他應用衝突
             });
 
             // 返回包含 Redis 設定的配置

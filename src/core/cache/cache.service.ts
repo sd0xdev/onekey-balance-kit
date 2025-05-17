@@ -31,12 +31,10 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(CacheService.name);
   private readonly defaultTtl: number;
   private readonly isUsingRedis: boolean;
-  private reconnectTimer?: NodeJS.Timeout;
   private readonly reconnectInterval = 5000; // 5秒重連
 
   // Redis 客戶端引用
   private redisClient: RedisClientType | null = null;
-  private isInitialized = false; // 追踪是否已初始化連接
 
   constructor(
     @Inject(CACHE_MANAGER) private readonly cacheManager: CustomCache,
@@ -70,79 +68,62 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 設置 Redis 事件監聽器
+   * 確保Redis連接 - 簡化只做基本檢查
+   */
+  private async ensureConnection(): Promise<boolean> {
+    // 如果不使用Redis，直接返回
+    if (!this.isUsingRedis) return false;
+
+    try {
+      // 獲取Redis客戶端
+      if (!this.redisClient) {
+        this.redisClient = this.getNativeRedisClient();
+        if (this.redisClient) {
+          this.setupRedisEventListeners();
+        }
+      }
+
+      return !!this.redisClient;
+    } catch (err) {
+      this.logger.warn(`Redis connection check failed: ${err}`);
+      return false;
+    }
+  }
+
+  // 簡化的onModuleInit
+  async onModuleInit() {
+    this.logger.log('Cache service initialized - using automatic connection management');
+
+    // 僅檢查可用性，不主動連接
+    if (this.isUsingRedis) {
+      void this.ensureConnection();
+    } else {
+      this.logger.log('Using memory cache, no Redis initialization needed');
+    }
+  }
+
+  /**
+   * 簡化的Redis事件監聽器
    */
   private setupRedisEventListeners(): void {
     if (!this.redisClient) return;
 
-    // 設置錯誤事件監聽器
+    // 只保留基本的事件監聽，用於日誌記錄
     this.redisClient.on('error', (err: Error) => {
       this.logger.error(`Redis client error: ${err.message}`);
-      this.logger.log('Will attempt to reconnect');
-      // 使用非同步安全的方式處理
-      setTimeout(() => this.scheduleReconnect(), 0);
+      // 不需要手動重連，由底層客戶端處理
     });
 
-    // 設置連接成功事件監聽器
     this.redisClient.on('connect', () => {
       this.logger.log('Redis client connected');
     });
 
-    // 設置重連事件監聽器
     this.redisClient.on('reconnecting', () => {
       this.logger.log('Redis client reconnecting...');
     });
   }
 
-  /**
-   * 確保Redis連接 - 懶啟動核心方法
-   */
-  private async ensureConnection(): Promise<boolean> {
-    // 如果不使用Redis或已檢查過初始化，直接返回
-    if (!this.isUsingRedis) return false;
-
-    // 第一次初始化
-    if (!this.redisClient) {
-      this.logger.log('Initializing Redis connection (lazy initialization)');
-      this.redisClient = this.getNativeRedisClient();
-
-      if (this.redisClient) {
-        this.setupRedisEventListeners();
-      } else {
-        this.logger.warn('Redis client not available during lazy initialization');
-        return false;
-      }
-    }
-
-    // 確保連接狀態
-    if (!this.redisClient) return false;
-
-    try {
-      if (!this.redisClient.isOpen) {
-        this.logger.debug('Redis client not connected, connecting now...');
-        await this.redisClient.connect();
-      }
-      return true;
-    } catch (err) {
-      this.logger.warn(`Redis connection failed during lazy initialization: ${err}`);
-      this.scheduleReconnect();
-      return false;
-    }
-  }
-
-  // onModuleInit 不再主動檢查連接
-  async onModuleInit() {
-    // 懶啟動模式：不再主動初始化Redis連接
-    this.logger.log('Cache service initialized in lazy mode');
-    // 添加一個空的 await 語句以滿足 require-await 規則
-    await Promise.resolve();
-  }
-
   async onModuleDestroy() {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-    }
-
     // 關閉 Redis 客戶端連接
     if (this.redisClient && this.redisClient.isOpen) {
       try {
@@ -152,54 +133,6 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
         this.logger.error(`Error disconnecting Redis client: ${err}`);
       }
     }
-  }
-
-  /**
-   * 安排重連機制
-   */
-  private scheduleReconnect() {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-    }
-
-    // 定義一個單獨的異步函數
-    const attemptReconnect = async () => {
-      this.logger.log('Attempting to reconnect to Redis...');
-      if (this.redisClient) {
-        try {
-          if (!this.redisClient.isOpen) {
-            await this.redisClient.connect();
-          }
-          const pingResult = await this.redisClient.ping();
-          this.logger.log(`Redis reconnected successfully: ${pingResult}`);
-        } catch (err) {
-          this.logger.error(`Redis reconnection failed: ${err}`);
-          this.scheduleReconnect();
-        }
-      } else {
-        // 嘗試重新獲取 Redis 客戶端
-        this.redisClient = this.getNativeRedisClient();
-        if (!this.redisClient) {
-          this.logger.error('Could not retrieve Redis client during reconnect');
-          this.scheduleReconnect();
-        } else {
-          try {
-            const pingResult = await this.redisClient.ping();
-            this.logger.log(`New Redis client connected successfully: ${pingResult}`);
-            // 重新設置事件監聽器
-            this.setupRedisEventListeners();
-          } catch (err) {
-            this.logger.error(`New Redis client connection failed: ${err}`);
-            this.scheduleReconnect();
-          }
-        }
-      }
-    };
-
-    // 非異步回調中調用異步函數
-    this.reconnectTimer = setTimeout(() => {
-      void attemptReconnect();
-    }, this.reconnectInterval);
   }
 
   /**
@@ -347,7 +280,7 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
    * 批次刪除符合模式的 Redis keys (使用 SCAN + UNLINK)
    */
   async deleteByPattern(pattern: string): Promise<number> {
-    // 懶啟動：使用前確保連接
+    // 基本檢查
     const connected = await this.ensureConnection();
 
     // 如果不是 Redis 存儲，則不支持模式刪除
@@ -368,18 +301,6 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
       let cursor = '0';
       let total = 0;
       do {
-        // 檢查 Redis 客戶端是否仍然連接
-        if (!redis.isOpen) {
-          this.logger.warn('Redis client is closed, trying to reconnect');
-          try {
-            await redis.connect();
-          } catch (err) {
-            this.logger.error(`Failed to reconnect Redis: ${err}`);
-            this.scheduleReconnect();
-            return total;
-          }
-        }
-
         const { cursor: next, keys } = await redis.scan(cursor, {
           MATCH: pattern,
           COUNT: 100,
@@ -395,7 +316,6 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
       return total;
     } catch (err) {
       this.logger.error(`Error deleting keys by pattern ${pattern}: ${err}`);
-      this.scheduleReconnect(); // 發生錯誤時嘗試重連
       return 0;
     }
   }
