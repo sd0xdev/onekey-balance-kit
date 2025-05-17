@@ -1,4 +1,5 @@
 import { ProviderInterface } from './provider.interface';
+import { ChainName } from '../../chains/constants';
 
 export enum NetworkType {
   MAINNET = 'mainnet',
@@ -63,6 +64,11 @@ export interface BlockchainProviderInterface extends ProviderInterface {
    * 獲取帳戶餘額資訊
    * @param address 區塊鏈地址
    * @param networkType 網絡類型
+   * @param chainName 區塊鏈名稱，用於多鏈提供者
    */
-  getBalances(address: string, networkType?: NetworkType): Promise<BalancesResponse>;
+  getBalances(
+    address: string,
+    networkType?: NetworkType,
+    chainName?: ChainName,
+  ): Promise<BalancesResponse>;
 }

@@ -62,7 +62,7 @@ describe('ChainIdController', () => {
 
       // 驗證
       expect(chainRouter.dispatch).toHaveBeenCalled();
-      expect(mockChainService.getBalances).toHaveBeenCalledWith(address, chainId);
+      expect(mockChainService.getBalances).toHaveBeenCalledWith(address, chainId, undefined);
       expect(result).toEqual(mockBalances);
     });
 
