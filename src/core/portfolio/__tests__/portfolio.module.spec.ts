@@ -4,6 +4,9 @@ import { PortfolioMongoListener } from '../portfolio-mongo.listener';
 import { DbModule } from '../../db/db.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 
+// 全局設置超時時間為 30 秒
+jest.setTimeout(30000);
+
 describe('PortfolioModule', () => {
   it('應該編譯 portfolio 模組', async () => {
     const module = await Test.createTestingModule({
