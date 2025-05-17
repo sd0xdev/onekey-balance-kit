@@ -87,7 +87,7 @@ export class PortfolioUpdateEvent extends NotificationEvent {
   }
 }
 
-// Redis 中的投資組合數據更新事件，用於觸發 MongoDB 寫入
+// Redis 中的投資組合數據更新事件，用於觸發 MongoDB 寫入和 Webhook 管理
 export class PortfolioRedisUpdatedEvent extends NotificationEvent {
   constructor(
     public readonly chain: ChainName,
@@ -185,7 +185,7 @@ export class NotificationService {
     this.eventEmitter.emit(NotificationEventType.PORTFOLIO_UPDATE, event);
   }
 
-  // 發送 Redis 中的投資組合數據已更新事件，用於觸發 MongoDB 寫入
+  // 發送 Redis 中的投資組合數據已更新事件，用於觸發 MongoDB 寫入和 Webhook 管理
   emitPortfolioRedisUpdated(
     chain: ChainName,
     chainId: number,

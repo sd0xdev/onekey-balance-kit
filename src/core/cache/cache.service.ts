@@ -280,37 +280,30 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
    * 批次刪除符合模式的 Redis keys (使用 SCAN + UNLINK)
    */
   async deleteByPattern(pattern: string): Promise<number> {
-    // 基本檢查
-    const connected = await this.ensureConnection();
+    if (!this.isUsingRedis || !(await this.ensureConnection())) return 0;
 
-    // 如果不是 Redis 存儲，則不支持模式刪除
-    if (!this.isUsingRedis || !connected) {
-      this.logger.warn(`Pattern deletion not supported: ${pattern}`);
-      return 0;
-    }
-
-    // 獲取 Redis 客戶端
-    const redis = this.redisClient;
-    if (!redis) {
-      this.logger.warn(`Redis client not available, can't delete pattern: ${pattern}`);
-      return 0;
-    }
+    const redis = this.redisClient!;
+    let total = 0;
+    let batch = redis.multi();
+    let counter = 0;
 
     try {
-      // 使用 SCAN + UNLINK 非阻塞方式刪除
-      let cursor = '0';
-      let total = 0;
-      do {
-        const { cursor: next, keys } = await redis.scan(cursor, {
-          MATCH: pattern,
-          COUNT: 100,
-        });
-        cursor = next;
-        if (keys.length) {
-          await redis.unlink(keys); // UNLINK 非阻塞刪除
-          total += keys.length;
+      // v4 內建 async iterator，省掉游標
+      for await (const key of redis.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+        batch.unlink(key);
+        counter++;
+        total++;
+
+        // 每 500 筆送一次，避免批次太大
+        if (counter >= 500) {
+          await batch.exec();
+          batch = redis.multi();
+          counter = 0;
         }
-      } while (cursor !== '0');
+      }
+
+      // 把剩下的也送出去
+      if (counter) await batch.exec();
 
       this.logger.debug(`Deleted ${total} keys matching pattern: ${pattern}`);
       return total;

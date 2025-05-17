@@ -15,6 +15,12 @@ const createMockRedisClient = () => ({
   on: jest.fn(),
   connect: jest.fn().mockResolvedValue(true),
   quit: jest.fn().mockResolvedValue('OK'),
+  scanIterator: jest.fn().mockImplementation(function* () {
+    yield 'test:key1';
+    yield 'test:key2';
+  }),
+  multi: jest.fn().mockReturnThis(),
+  exec: jest.fn().mockResolvedValue(['OK', 'OK']),
 });
 
 describe('CacheService', () => {
@@ -488,11 +494,14 @@ describe('CacheService', () => {
     it('deleteByPattern 方法應該使用 Redis SCAN + UNLINK 刪除符合模式的鍵', async () => {
       const result = await service.deleteByPattern('test:*');
 
-      expect(mockRedisClient.scan).toHaveBeenCalledWith('0', {
+      expect(mockRedisClient.scanIterator).toHaveBeenCalledWith({
         MATCH: 'test:*',
         COUNT: 100,
       });
-      expect(mockRedisClient.unlink).toHaveBeenCalledWith(['test:key1', 'test:key2']);
+      // 檢查 unlink 被調用了兩次，每次一個鍵
+      expect(mockRedisClient.unlink).toHaveBeenCalledTimes(2);
+      expect(mockRedisClient.unlink).toHaveBeenNthCalledWith(1, 'test:key1');
+      expect(mockRedisClient.unlink).toHaveBeenNthCalledWith(2, 'test:key2');
       expect(result).toBe(2);
     });
 
@@ -501,7 +510,7 @@ describe('CacheService', () => {
 
       const result = await service.deleteByPattern('test:*');
 
-      expect(mockRedisClient.scan).toHaveBeenCalled();
+      expect(mockRedisClient.scanIterator).toHaveBeenCalled();
       expect(result).toBe(2);
     });
 

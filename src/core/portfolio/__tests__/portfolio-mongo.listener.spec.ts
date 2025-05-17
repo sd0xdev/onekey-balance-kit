@@ -7,10 +7,14 @@ import {
 } from '../../../notification/notification.service';
 import { ChainName } from '../../../chains/constants';
 import { ProviderType } from '../../../providers/constants/blockchain-types';
+import { WebhookManagementService } from '../../../webhook/webhook-management.service';
+import { getModelToken } from '@nestjs/mongoose';
+import { PortfolioSnapshot } from '../../db/schemas/portfolio-snapshot.schema';
 
 describe('PortfolioMongoListener', () => {
   let listener: PortfolioMongoListener;
   let dbService: DbService;
+  let webhookManagementService: WebhookManagementService;
 
   // 模擬資料
   const mockPortfolioData = {
@@ -68,11 +72,32 @@ describe('PortfolioMongoListener', () => {
               }),
           },
         },
+        {
+          provide: WebhookManagementService,
+          useValue: {
+            updateWebhookAddresses: jest.fn().mockResolvedValue(true),
+          },
+        },
+        {
+          provide: getModelToken(PortfolioSnapshot.name),
+          useValue: {
+            find: jest.fn().mockReturnValue({
+              select: jest.fn().mockReturnThis(),
+              lean: jest.fn().mockResolvedValue([]),
+            }),
+            updateMany: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+          },
+        },
       ],
     }).compile();
 
     listener = module.get<PortfolioMongoListener>(PortfolioMongoListener);
     dbService = module.get<DbService>(DbService);
+    webhookManagementService = module.get<WebhookManagementService>(WebhookManagementService);
+
+    // 修改 logger 避免輸出
+    jest.spyOn(listener['logger'], 'debug').mockImplementation(() => {});
+    jest.spyOn(listener['logger'], 'error').mockImplementation(() => {});
   });
 
   it('應該被定義', () => {
@@ -133,6 +158,9 @@ describe('PortfolioMongoListener', () => {
         3600, // TTL 1小時
       );
 
+      // 模擬 updateWebhookAddresses 方法
+      jest.spyOn(listener as any, 'updateWebhookAddresses').mockResolvedValue(undefined);
+
       // 執行方法
       await listener.handlePortfolioRedisUpdated(event);
 
@@ -163,6 +191,9 @@ describe('PortfolioMongoListener', () => {
         '0x1234567890123456789012345678901234567890',
         mockPortfolioData,
       );
+
+      // 模擬 updateWebhookAddresses 方法
+      jest.spyOn(listener as any, 'updateWebhookAddresses').mockResolvedValue(undefined);
 
       // 創建 logger 的 spy
       const loggerErrorSpy = jest.spyOn(listener['logger'], 'error');
