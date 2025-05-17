@@ -3,7 +3,9 @@ import { ProviderType } from '../constants/blockchain-types';
 import { BalanceStrategy } from './balance-strategy.interface';
 import { EvmAlchemyStrategy } from './implementations/evm-alchemy.strategy';
 import { SolanaAlchemyStrategy } from './implementations/solana-alchemy.strategy';
+import { EvmQuickNodeStrategy } from './implementations/evm-quicknode.strategy';
 import { Alchemy, Network } from 'alchemy-sdk';
+import { Core } from '@quicknode/sdk';
 
 /**
  * 餘額策略工廠 - 用於創建對應的策略實例
@@ -72,6 +74,58 @@ export class BalanceStrategyFactory {
       strategy = new SolanaAlchemyStrategy(apiKey, isDevnet);
     } else {
       throw new Error(`Unsupported chain: ${chainName}`);
+    }
+
+    // 儲存到緩存
+    this.strategies.set(key, strategy);
+
+    return strategy;
+  }
+
+  /**
+   * 創建 QuickNode 策略
+   * @param chainName 鏈名稱
+   * @param mainnetEndpointUrl 主網端點 URL
+   * @param testnetEndpointUrl 測試網端點 URL
+   * @returns 對應的策略實例
+   */
+  public static createQuickNodeStrategy(
+    chainName: ChainName,
+    mainnetEndpointUrl: string,
+    testnetEndpointUrl?: string,
+  ): BalanceStrategy {
+    const key = this.getStrategyKey(chainName, ProviderType.QUICKNODE);
+
+    // 檢查緩存
+    if (this.strategies.has(key)) {
+      return this.strategies.get(key)!;
+    }
+
+    let strategy: BalanceStrategy;
+
+    // 根據鏈類型創建策略
+    if (this.EVM_CHAINS.includes(chainName)) {
+      // 創建 QuickNode Core 客戶端
+      let mainnetClient: Core | null = null;
+      let testnetClient: Core | null = null;
+
+      if (mainnetEndpointUrl) {
+        mainnetClient = new Core({
+          endpointUrl: mainnetEndpointUrl,
+          config: { addOns: { nftTokenV2: true } },
+        });
+      }
+
+      if (testnetEndpointUrl) {
+        testnetClient = new Core({
+          endpointUrl: testnetEndpointUrl,
+          config: { addOns: { nftTokenV2: true } },
+        });
+      }
+
+      strategy = new EvmQuickNodeStrategy(mainnetClient, testnetClient);
+    } else {
+      throw new Error(`QuickNode does not support chain: ${chainName}`);
     }
 
     // 儲存到緩存

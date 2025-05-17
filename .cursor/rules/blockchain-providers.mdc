@@ -21,6 +21,7 @@ alwaysApply: false
 
 - [BalanceStrategy 介面](mdc:src/providers/strategies/balance-strategy.interface.ts) - 定義所有策略必須實現的方法
 - [EvmAlchemyStrategy](mdc:src/providers/strategies/implementations/evm-alchemy.strategy.ts) - 基於 Alchemy SDK 的 EVM 策略實現
+- [EvmQuickNodeStrategy](mdc:src/providers/strategies/implementations/evm-quicknode.strategy.ts) - 基於 QuickNode SDK 的 EVM 策略實現
 - [SolanaAlchemyStrategy](mdc:src/providers/strategies/implementations/solana-alchemy.strategy.ts) - Solana 鏈策略實現，使用 Alchemy RPC 和 Portfolio API
 - [BalanceStrategyFactory](mdc:src/providers/strategies/balance-strategy.factory.ts) - 策略工廠，用於創建和管理策略實例
 
@@ -28,18 +29,20 @@ alwaysApply: false
 
 - [BalanceAdapter 介面](mdc:src/providers/adapters/balance-adapter.interface.ts) - 定義所有適配器的方法
 - [EvmBalanceAdapter](mdc:src/providers/adapters/implementations/evm-balance.adapter.ts) - EVM 鏈的適配器實現
+- [EvmQuickNodeAdapter](mdc:src/providers/adapters/implementations/evm-quicknode.adapter.ts) - QuickNode EVM 回應的適配器實現
 - [SolanaBalanceAdapter](mdc:src/providers/adapters/implementations/solana-balance.adapter.ts) - Solana 鏈的適配器實現
 - [BalanceAdapterFactory](mdc:src/providers/adapters/balance-adapter.factory.ts) - 適配器工廠，創建和管理適配器實例
 
 ### 提供者實現
 
 - [AlchemyProviderFacade](mdc:src/providers/implementations/multi-chain/alchemy-provider.facade.ts) - Alchemy 多鏈提供者門面，使用策略和適配器處理不同鏈的請求
+- [EthereumQuickNodeProvider](mdc:src/providers/implementations/ethereum/ethereum-quicknode.provider.ts) - QuickNode 以太坊提供者門面，使用策略和適配器處理請求
 - [Provider 裝飾器](mdc:src/providers/decorators/provider.decorator.ts) - 用於標記和註冊提供者
 - [ProvidersModule](mdc:src/providers/providers.module.ts) - 提供者模組配置
 
 ## 模組配置
 
-[providers.module.ts](mdc:src/providers/providers.module.ts) 中註冊了所有提供者，包括重構後的 `AlchemyProviderFacade`。
+[providers.module.ts](mdc:src/providers/providers.module.ts) 中註冊了所有提供者，包括重構後的 `AlchemyProviderFacade` 和 `EthereumQuickNodeProvider`。
 
 ## 使用範例
 
@@ -62,6 +65,14 @@ const solBalances = await this.alchemyProvider.getBalances(
   NetworkType.MAINNET,
   ChainName.SOLANA
 );
+
+// 使用 QuickNode 提供者
+constructor(private readonly quickNodeProvider: EthereumQuickNodeProvider) {}
+
+const ethBalancesQuickNode = await this.quickNodeProvider.getBalances(
+  '0x123...',
+  NetworkType.MAINNET
+);
 ```
 
 ## 擴展指南
@@ -76,10 +87,20 @@ const solBalances = await this.alchemyProvider.getBalances(
 ### 添加新的提供者
 
 1. 為每個需要支援的鏈創建策略實現（實現 `BalanceStrategy`）
-2. 創建新的提供者門面（繼承 `AbstractProviderService`）
+2. 創建適當的適配器或使用現有適配器
+3. 創建新的提供者門面（繼承 `AbstractProviderService`）
+4. 在提供者門面中使用策略工廠和適配器工廠獲取相應實例
+
+### QuickNode 提供者實現範例
+
+QuickNode 提供者使用三層架構：
+- **策略層**: `EvmQuickNodeStrategy` 負責與 QuickNode API 通訊
+- **適配器層**: `EvmQuickNodeAdapter` 將原始資料轉換為統一格式
+- **外觀層**: `EthereumQuickNodeProvider` 作為前端，協調策略和適配器
 
 ## 注意事項
 
 - 使用 EIP-1559 gas 費用模型，優先從 `maxFeePerGas` 獲取
 - Solana 公共 RPC 有請求限制，實際應用中應實現指數退避重試和缓存
 - 添加新鏈時需在多個位置更新，包括 ChainName 常量、策略列表和適配器工廠
+- QuickNode 提供者目前支援以太坊及其測試網，可擴展到 Polygon、BSC 等其他 EVM 鏈
