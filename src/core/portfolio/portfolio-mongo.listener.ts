@@ -5,7 +5,6 @@ import {
   NotificationEventType,
   PortfolioRedisUpdatedEvent,
 } from '../../notification/notification.service';
-import { BalanceResponse } from '../../chains/interfaces/balance-queryable.interface';
 
 /**
  * 投資組合MongoDB同步監聽器

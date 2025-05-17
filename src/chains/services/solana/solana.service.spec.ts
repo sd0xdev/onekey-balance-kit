@@ -133,7 +133,11 @@ describe('SolanaService', () => {
       const result = await service.getBalances(address);
 
       expect(mockProviderFactory.getProvider).toHaveBeenCalledWith(ChainName.SOLANA, 'alchemy');
-      expect(mockSolanaProvider.getBalances).toHaveBeenCalledWith(address, NetworkType.MAINNET);
+      expect(mockSolanaProvider.getBalances).toHaveBeenCalledWith(
+        address,
+        NetworkType.MAINNET,
+        ChainName.SOLANA,
+      );
 
       expect(result).toEqual({
         cluster: SolanaCluster.MAINNET,
@@ -174,7 +178,11 @@ describe('SolanaService', () => {
     it('應該使用測試網絡獲取餘額', async () => {
       await service.getBalances(address, SolanaCluster.TESTNET as unknown as number);
 
-      expect(mockSolanaProvider.getBalances).toHaveBeenCalledWith(address, NetworkType.TESTNET);
+      expect(mockSolanaProvider.getBalances).toHaveBeenCalledWith(
+        address,
+        NetworkType.TESTNET,
+        ChainName.SOLANA,
+      );
 
       // 檢查結果包含正確的集群
       const result = await service.getBalances(address, SolanaCluster.TESTNET as unknown as number);

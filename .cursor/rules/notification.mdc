@@ -1,0 +1,82 @@
+---
+description: 通知模組 (Notification Module)
+globs:
+alwaysApply: false
+---
+# 通知模組 (Notification Module)
+
+通知模組是一個全局可用的事件驅動系統，負責處理各種類型的事件通知，包括區塊鏈活動、投資組合更新和快取管理等。
+
+## 主要元件
+
+- [通知模組定義](mdc:src/notification/notification.module.ts)：全局模組的設定
+- [通知服務實現](mdc:src/notification/notification.service.ts)：事件發送與處理的核心邏輯
+
+## 事件類型
+
+通知系統支援以下事件類型：
+
+### 通知事件 (NotificationEventType)
+- `ADDRESS_ACTIVITY`: 地址活動
+- `TOKEN_ACTIVITY`: 代幣活動
+- `NFT_ACTIVITY`: NFT 活動
+- `TRANSACTION_MINED`: 交易已確認
+- `TRANSACTION_DROPPED`: 交易已丟棄
+- `CUSTOM_EVENT`: 自定義事件
+- `PORTFOLIO_UPDATE`: 投資組合更新
+- `PORTFOLIO_REDIS_UPDATED`: Redis 中的投資組合已更新
+
+### 快取失效事件 (CacheInvalidationEventType)
+- `ADDRESS_CACHE_INVALIDATED`: 地址相關的快取已失效
+
+## 主要功能
+
+1. **事件發送**:
+   - 提供多種方法發送不同類型的事件
+   - 支援地址活動、交易確認、投資組合更新等事件的發送
+
+2. **事件監聽與處理**:
+   - 使用 `@OnEvent` 裝飾器來監聽和處理特定類型的事件
+   - 處理程序包括日誌記錄和額外的業務邏輯
+
+3. **快取管理**:
+   - 通過 `emitAddressCacheInvalidated` 方法發送快取失效事件
+   - 與 `CacheKeyService` 集成進行快取鍵管理
+
+## 使用示例
+
+```typescript
+// 注入服務
+constructor(private readonly notificationService: NotificationService) {}
+
+// 發送投資組合更新事件
+this.notificationService.emitPortfolioUpdate(
+  ChainName.ETHEREUM,
+  1,
+  '0x123...',
+  portfolioData,
+  ProviderType.ALCHEMY
+);
+
+// 發送快取失效事件
+await this.notificationService.emitAddressCacheInvalidated(
+  ChainName.ETHEREUM,
+  1,
+  '0x123...'
+);
+```
+
+## 擴展指南
+
+要添加新的事件類型：
+
+1. 在 `NotificationEventType` 枚舉中添加新的事件類型
+2. 創建對應的事件類別，繼承自 `NotificationEvent`
+3. 在 `NotificationService` 中添加相應的 emit 方法
+4. 使用 `@OnEvent` 裝飾器實現事件處理方法
+
+## 最佳實踐
+
+- 使用通知模組進行系統內部的異步通信
+- 對於性能敏感的操作，考慮使用 `emitAsync` 方法
+- 事件處理器內應包含錯誤處理邏輯，避免單個處理器的失敗影響整體系統

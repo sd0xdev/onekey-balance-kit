@@ -27,6 +27,7 @@ export interface ProviderOptions {
 export interface ProviderMeta {
   blockchainTypes: Set<ChainName | string>;
   providerType: ProviderType | string;
+  blockchainType: ChainName | ChainName[] | string | string[]; // 保存原始區塊鏈類型
 }
 
 /**
@@ -41,10 +42,11 @@ export const Provider = (options: ProviderOptions) => {
   const blockchainTypes = Array.isArray(blockchainType) ? blockchainType : [blockchainType];
 
   return (target: any) => {
-    // 設置元數據
+    // 設置元數據，保存完整的選項
     const metadata: ProviderMeta = {
       blockchainTypes: new Set(blockchainTypes),
       providerType,
+      blockchainType, // 保存原始區塊鏈類型
     };
 
     Reflect.defineMetadata(PROVIDER_METADATA, metadata, target);

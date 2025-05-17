@@ -162,13 +162,6 @@ export class BalanceService {
       if (isBalanceQueryable(chainService)) {
         this.logger.debug(`Chain service implements BalanceQueryable interface`);
         balanceData = await chainService.getBalances(address, chainId, providerFromContext);
-      }
-      // 如果沒有實現新介面，但有舊的 getBalances 方法
-      else if (typeof chainService.getBalances === 'function') {
-        this.logger.debug(`Chain service has legacy getBalances method`);
-        const legacyData = await chainService.getBalances(address, chainId);
-        // 轉換為新格式
-        balanceData = this.convertLegacyBalanceToModern(legacyData, chainService.getChainSymbol());
       } else {
         throw new BalanceException(
           ErrorCode.BALANCE_CHAIN_NOT_SUPPORTED,
@@ -181,6 +174,11 @@ export class BalanceService {
           ErrorCode.BALANCE_FETCH_FAILED,
           `Failed to get balance for ${chain}:${address}`,
         );
+      }
+
+      // 檢查 balanceData 是否是舊格式 (陣列類型)
+      if (Array.isArray(balanceData)) {
+        balanceData = this.convertLegacyBalanceToModern(balanceData, chainService.getChainSymbol());
       }
 
       // 確保結果具有必要的屬性

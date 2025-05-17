@@ -20,7 +20,7 @@
 └───────────────┘                 └──────┬──────┘
         ▲   REST HTTPS                     │ Redis.DEL
         │                                  ▼
-Client  │ GET /v1/balances             ┌──────────┐
+Client  │ GET /v1/api/balances             ┌──────────┐
 ────────┼─────────────────────────────▶│  API      │
         │                             │ Nest.js   │
         ▼                             └────┬──────┘

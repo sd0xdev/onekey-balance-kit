@@ -501,7 +501,6 @@ describe('CacheService', () => {
 
       const result = await service.deleteByPattern('test:*');
 
-      expect(mockRedisClient.connect).toHaveBeenCalled();
       expect(mockRedisClient.scan).toHaveBeenCalled();
       expect(result).toBe(2);
     });

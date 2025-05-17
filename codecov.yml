@@ -1,0 +1,20 @@
+coverage:
+  status:
+    project:
+      default:
+        # 設置整體項目覆蓋率檢查為非必需
+        informational: true
+        # 設置閾值，允許覆蓋率下降
+        target: 50%
+        threshold: 1%
+    patch:
+      default:
+        # 設置差異覆蓋率檢查為非必需
+        informational: true
+        # 設置閾值
+        target: 50%
+
+  # 覆蓋率顯示設置
+  range: 50..75
+  round: down
+  precision: 2

@@ -74,5 +74,5 @@ export interface ChainService {
    * 獲取地址的餘額（包括主幣和代幣）
    * 此方法是可選的，不是所有鏈服務都必須實現
    */
-  getBalances?(address: string, chainId?: number): Promise<BalanceResponse>;
+  getBalances?(address: string, chainId?: number, providerType?: string): Promise<BalanceResponse>;
 }

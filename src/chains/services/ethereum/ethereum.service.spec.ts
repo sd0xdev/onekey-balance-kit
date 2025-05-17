@@ -150,7 +150,11 @@ describe('EthereumService', () => {
         EthereumChainId.MAINNET,
         'alchemy',
       );
-      expect(mockEthereumProvider.getBalances).toHaveBeenCalledWith(address, NetworkType.MAINNET);
+      expect(mockEthereumProvider.getBalances).toHaveBeenCalledWith(
+        address,
+        NetworkType.MAINNET,
+        ChainName.ETHEREUM,
+      );
 
       expect(result).toEqual({
         chainId: EthereumChainId.MAINNET,
@@ -189,7 +193,11 @@ describe('EthereumService', () => {
         EthereumChainId.SEPOLIA,
         'alchemy',
       );
-      expect(mockEthereumProvider.getBalances).toHaveBeenCalledWith(address, NetworkType.TESTNET);
+      expect(mockEthereumProvider.getBalances).toHaveBeenCalledWith(
+        address,
+        NetworkType.TESTNET,
+        ChainName.ETHEREUM_SEPOLIA,
+      );
     });
 
     it('應該使用指定的提供者類型', async () => {

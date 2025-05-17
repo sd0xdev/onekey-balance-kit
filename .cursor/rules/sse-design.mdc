@@ -1,0 +1,137 @@
+---
+description: SSE 快取失效通知系統設計
+globs:
+alwaysApply: false
+---
+# SSE 快取失效通知系統設計
+
+## 系統概述
+
+該系統使用 Server-Sent Events (SSE) 在後端快取失效時向前端發送通知，使前端能夠即時更新顯示的資料。系統使用本地 EventEmitter 處理事件傳播，適用於單實例部署環境。
+
+主要文件：
+- 控制器：[src/core/sse/sse.controller.ts](mdc:src/core/sse/sse.controller.ts)
+- 服務：[src/core/sse/sse-subscription.service.ts](mdc:src/core/sse/sse-subscription.service.ts)
+- 快取鍵服務：[src/core/cache/cache-key.service.ts](mdc:src/core/cache/cache-key.service.ts)
+- 通知服務：[src/notification/notification.service.ts](mdc:src/notification/notification.service.ts)
+
+## 架構設計
+
+### 核心組件
+1. **EventEmitter2** - NestJS 內建的事件發射器，用於在服務間傳遞事件
+2. **SseSubscriptionService** - 管理 SSE 客戶端連接和事件訂閱
+3. **NotificationService** - 發送各種通知事件
+4. **CacheMongoService** - 處理地址活動並觸發快取失效
+
+### 事件流程
+1. 當區塊鏈上發生交易或合約事件時，系統接收 webhook 通知
+2. `WebhookService` 處理通知並觸發 `ADDRESS_ACTIVITY` 事件
+3. `CacheMongoService` 監聽該事件並清除相關快取
+4. `CacheMongoService` 呼叫 `NotificationService.emitAddressCacheInvalidated()`
+5. `NotificationService` 發出 `ADDRESS_CACHE_INVALIDATED` 事件
+6. `SseSubscriptionService` 接收事件並通過 SSE 通道發送到瀏覽器
+
+## 快取鍵格式
+
+所有快取鍵使用以下格式：
+```
+portfolio:{chain}:{chainId}:{address}:[額外部分]
+```
+
+例如：`portfolio:ethereum:1:0x123456789abcdef`
+
+## 工作流程
+
+1. 前端通過 `/sse/subscribe/cache` 端點建立 SSE 連接
+2. 後端發送快取失效事件，包括完整的快取鍵和元數據
+3. 前端根據接收到的事件決定是否需要更新特定地址的資料
+4. 心跳機制確保連接保持活躍（每25秒發送一次心跳）
+5. 客戶端連接超過30秒無響應時自動斷開
+
+## 前端使用指南
+
+前端應該：
+1. 建立單一 SSE 連接監聽所有事件
+2. 維護一個需要監聽的地址列表
+3. 解析接收到的快取鍵，提取鏈、鏈ID和地址信息
+4. 僅當事件匹配關注的地址時，才觸發數據更新
+5. 實現斷線重連機制
+
+## 事件格式
+
+```json
+{
+  "key": "portfolio:ethereum:1:0x123456789abcdef",
+  "pattern": "portfolio:ethereum:1:0x123456789abcdef*",
+  "timestamp": 1623456789,
+  "metadata": {
+    "chain": "ethereum",
+    "chainId": 1,
+    "address": "0x123456789abcdef"
+  }
+}
+```
+
+## 優化特性
+
+1. 內建心跳機制，防止連接超時
+2. Last-Event-ID 支援，斷線後可恢復丟失的事件
+3. 紀錄最近100個事件以支援事件回放
+4. 客戶端超時檢測，自動清理不活躍的連接
+5. 使用 `emitAsync()` 確保事件處理完成後再繼續執行後續代碼
+6. 針對地址的事件過濾，減少前端不必要的數據刷新
+
+## 當前實現的限制
+
+當前設計使用本地 EventEmitter 實現，適用於單實例部署。不支持多實例部署場景下的事件分發。
+
+## 未來擴展考量
+
+### 多實例支持
+
+如需擴展至多實例部署，有以下選項：
+
+1. **使用 Redis Pub/Sub**：
+   - 需要創建兩個 Redis 客戶端：一個用於訂閱，一個用於發布和其他操作
+   - Redis 客戶端在訂閱模式下無法執行其他命令
+   - 實現示例：
+   ```typescript
+   // Redis 服務提供兩個客戶端
+   @Module({
+     providers: [
+       {
+         provide: 'REDIS_SUBSCRIBER',
+         useFactory: () => new Redis(...),
+       },
+       {
+         provide: 'REDIS_CLIENT',
+         useFactory: () => new Redis(...),
+       },
+     ],
+   })
+   ```
+
+2. **使用 RabbitMQ 或 Kafka**：
+   - 更強大的消息隊列功能，支持複雜的路由和消費模式
+   - 適合大規模部署和高吞吐量場景
+   - 提供更可靠的消息傳遞保證
+
+3. **使用 Socket.io 適配器**：
+   - NestJS 支持 Socket.io 適配器，可與 Redis、MongoDB 等集成
+   - 提供現成的集群支持
+
+### 性能考量
+
+1. **事件過濾**：當前在每個訂閱客戶端都處理所有事件，在大量連接情況下考慮在服務器端進行更高效的過濾
+
+2. **事件壓縮**：考慮批處理和壓縮相關事件，減少客戶端網絡開銷
+
+3. **快取策略**：考慮使用更細粒度的快取失效策略，只使特定部分的數據失效
+
+### 安全考量
+
+1. **增加認證**：將 SSE 端點加入認證保護
+
+2. **限流**：實施每個用戶的連接數量和事件率限制
+
+3. **消息驗證**：在多實例場景中，考慮添加消息簽名，防止偽造消息

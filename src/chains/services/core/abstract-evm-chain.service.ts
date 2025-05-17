@@ -221,7 +221,16 @@ export abstract class AbstractEvmChainService
           this.logInfo(`Using ${provider.getProviderName()} provider for ${this.getChainName()}`);
 
           // 從提供者獲取餘額數據
-          const balancesResponse = await provider.getBalances(address, networkType);
+          // 使用 chainInfo 獲取當前鏈的確切名稱，以便 provider 能正確識別
+          const chainInfo = this.getChainInfoByChainId(this.currentChainId);
+          const currentChainName = chainInfo ? chainInfo.name : this.evmChain();
+          this.logInfo(`Using chain name for provider: ${currentChainName}`);
+
+          const balancesResponse = await provider.getBalances(
+            address,
+            networkType,
+            currentChainName,
+          );
 
           // 將提供者的響應轉換為標準響應格式
           return {

@@ -30,9 +30,9 @@ describe('多鏈餘額查詢 (e2e)', () => {
     ['ethereum', 'ETH'],
     ['polygon', 'MATIC'],
     ['bsc', 'BNB'],
-  ])('GET /v1/balances/%s/:address', async (chain, expectedSymbol) => {
+  ])('GET /v1/api/balances/%s/:address', async (chain, expectedSymbol) => {
     const response = await request(app.getHttpServer())
-      .get(`/v1/balances/${chain}/${TEST_ADDRESS}`)
+      .get(`/v1/api/balances/${chain}/${TEST_ADDRESS}`)
       .expect(200);
 
     // 驗證響應格式

@@ -33,17 +33,18 @@ export class ProviderDiscoveryService {
       const metadata = this.reflector.get(PROVIDER_METADATA, metatype);
 
       if (metadata) {
-        const { blockchainTypes, providerType } = metadata;
+        const { blockchainTypes, providerType, blockchainType } = metadata;
         // 確保 metatype 是 Type<BlockchainProviderInterface> 類型
         const providerClass = metatype as Type<BlockchainProviderInterface>;
 
         // 為每個支援的區塊鏈類型創建一個註冊
         if (blockchainTypes) {
-          blockchainTypes.forEach((blockchainType) => {
+          blockchainTypes.forEach((type) => {
             result.push({
-              blockchainType,
+              blockchainType: type,
               providerType,
               providerClass,
+              originalBlockchainType: blockchainType, // 添加原始區塊鏈類型
             });
           });
         }

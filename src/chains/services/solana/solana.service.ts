@@ -174,7 +174,11 @@ export class SolanaService extends AbstractChainService implements BalanceQuerya
           this.logInfo(`Using ${provider.getProviderName()} provider for Solana`);
 
           // 從提供者獲取餘額數據
-          const balancesResponse = await provider.getBalances(address, networkType);
+          const balancesResponse = await provider.getBalances(
+            address,
+            networkType,
+            ChainName.SOLANA,
+          );
 
           // 檢查是否成功獲取餘額數據
           if (balancesResponse.isSuccess === false) {
