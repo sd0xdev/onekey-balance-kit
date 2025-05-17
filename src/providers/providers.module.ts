@@ -6,7 +6,6 @@ import { ProviderFactory } from './provider.factory';
 import { ProviderDiscoveryService } from './provider-discovery.service';
 import { ProviderType } from './constants/blockchain-types';
 import { PROVIDERS_TOKEN } from './constants/provider-registration';
-import { SolanaAlchemyProvider } from './implementations/solana/solana-alchemy.provider';
 import { EthereumQuickNodeProvider } from './implementations/ethereum/ethereum-quicknode.provider';
 import { AlchemyProviderFacade } from './implementations/multi-chain/alchemy-provider.facade';
 import { ChainName } from '../chains/constants';
@@ -26,11 +25,6 @@ const providersProvider = {
       providerType: ProviderType.QUICKNODE,
       providerClass: EthereumQuickNodeProvider,
     },
-    {
-      blockchainType: ChainName.SOLANA,
-      providerType: ProviderType.ALCHEMY,
-      providerClass: SolanaAlchemyProvider,
-    },
     // 這裡可以添加更多提供者
   ],
 };
@@ -44,7 +38,6 @@ const providersProvider = {
     ProviderDiscoveryService,
     AlchemyProviderFacade, // 使用新的多鏈提供者
     EthereumQuickNodeProvider,
-    SolanaAlchemyProvider,
     // 通過工廠模式和依賴注入管理提供者
   ],
   exports: [ProviderFactory],
