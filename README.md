@@ -1,7 +1,7 @@
 # OneKeyBalanceKit
 
 [![CI](https://github.com/sd0xdev/onekey-balance-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/sd0xdev/onekey-balance-kit/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/sd0xdev/onekey-balance-kit/branch/main/graph/badge.svg)](https://codecov.io/gh/sd0xdev/onekey-balance-kit)
+[![codecov](https://codecov.io/gh/sd0xdev/onekey-balance-kit/graph/badge.svg?token=159I3Z37RP)](https://codecov.io/gh/sd0xdev/onekey-balance-kit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-22.x-brightgreen.svg)](https://nodejs.org/)
 [![NestJS](https://img.shields.io/badge/NestJS-11.x-red.svg)](https://nestjs.com/)
