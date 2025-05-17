@@ -1,19 +1,19 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { EthereumQuickNodeProvider } from './ethereum-quicknode.provider';
-import { NetworkType } from '../../interfaces/blockchain-provider.interface';
+import { EthereumQuickNodeProvider } from '../ethereum-quicknode.provider';
+import { NetworkType } from '../../../interfaces/blockchain-provider.interface';
 import { Core } from '@quicknode/sdk';
-import { BalanceStrategyFactory } from '../../strategies/balance-strategy.factory';
-import { BalanceAdapterFactory } from '../../adapters/balance-adapter.factory';
-import { ChainName } from '../../../chains/constants';
-import { ProviderType } from '../../constants/blockchain-types';
-import { EvmQuickNodeStrategy } from '../../strategies/implementations/evm-quicknode.strategy';
+import { BalanceStrategyFactory } from '../../../strategies/balance-strategy.factory';
+import { BalanceAdapterFactory } from '../../../adapters/balance-adapter.factory';
+import { ChainName } from '../../../../chains/constants';
+import { ProviderType } from '../../../constants/blockchain-types';
+import { EvmQuickNodeStrategy } from '../../../strategies/implementations/evm-quicknode.strategy';
 
 // Mock BalanceStrategyFactory
-jest.mock('../../strategies/balance-strategy.factory');
+jest.mock('../../../strategies/balance-strategy.factory');
 
 // Mock BalanceAdapterFactory
-jest.mock('../../adapters/balance-adapter.factory');
+jest.mock('../../../adapters/balance-adapter.factory');
 
 // Common test addresses and constants
 const TEST_WALLET_ADDRESS = '0x1234567890123456789012345678901234567890';

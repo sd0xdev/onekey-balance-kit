@@ -3,14 +3,18 @@ import { ProviderFactory } from '../provider.factory';
 import { ConfigService } from '@nestjs/config';
 import { ChainName } from '../../chains/constants';
 import { PROVIDER_METADATA } from '../constants/provider-metadata';
+import { PROVIDERS_TOKEN } from '../constants/provider-registration';
 import { AlchemyProviderFacade } from '../implementations/multi-chain/alchemy-provider.facade';
 import { EthereumQuickNodeProvider } from '../implementations/ethereum/ethereum-quicknode.provider';
 import { ModuleRef } from '@nestjs/core';
 import { ProviderDiscoveryService } from '../provider-discovery.service';
 import {
+  BalancesResponse,
   BlockchainProviderInterface,
+  ChainConfig,
   NetworkType,
 } from '../interfaces/blockchain-provider.interface';
+import { ProviderType } from '../constants/blockchain-types';
 
 // Mock provider implementations
 class MockProvider implements BlockchainProviderInterface {
@@ -58,6 +62,58 @@ class MockProvider implements BlockchainProviderInterface {
   }
 }
 
+// 從原本 provider.factory.spec.ts 中的模擬以太坊提供者
+class MockEthereumProvider {
+  getProviderName(): string {
+    return 'MockEthereum';
+  }
+
+  getBlockchainType(): ChainName {
+    return ChainName.ETHEREUM;
+  }
+
+  getSupportedNetworks(): NetworkType[] {
+    return [NetworkType.MAINNET, NetworkType.TESTNET];
+  }
+
+  async getBalance(address: string, network?: NetworkType): Promise<any> {
+    return { balance: '1000000000000000000' };
+  }
+
+  getChainConfig(): ChainConfig {
+    return {
+      chainId: 1,
+      name: 'Ethereum Mainnet',
+      nativeSymbol: 'ETH',
+      nativeDecimals: 18,
+      testnetChainId: 5,
+      testnetName: 'Goerli',
+    };
+  }
+
+  getBalances(address: string, networkType?: NetworkType): Promise<BalancesResponse> {
+    return Promise.resolve({
+      nativeBalance: {
+        balance: '1000000000000000000',
+      },
+      tokens: [],
+      nfts: [],
+    });
+  }
+
+  isSupported(): boolean {
+    return true;
+  }
+
+  getApiKey(): string {
+    return 'test-api-key';
+  }
+
+  getBaseUrl(): string {
+    return 'https://test.url';
+  }
+}
+
 describe('ProviderFactory', () => {
   let factory: ProviderFactory;
   let mockConfigService: Partial<ConfigService>;
@@ -65,22 +121,20 @@ describe('ProviderFactory', () => {
   let mockAlchemyFacade: Partial<AlchemyProviderFacade>;
   let mockQuicknodeProvider: Partial<EthereumQuickNodeProvider>;
   let mockDiscoveryService: Partial<ProviderDiscoveryService>;
+  // 用於完整測試的 mock 實例
+  const mockEthereumProvider = new MockEthereumProvider();
 
   beforeEach(async () => {
     mockConfigService = {
       get: jest.fn().mockImplementation((key: string) => {
         if (key === 'blockchain.providers.ethereum') return ['alchemy', 'quicknode'];
         if (key === 'blockchain.providers.solana') return ['alchemy'];
+        if (key === 'PROVIDER_ETHEREUM') return 'alchemy';
         return null;
       }),
     };
 
     mockAlchemyFacade = {
-      // getProviderMetadata: jest.fn().mockReturnValue({
-      //   id: PROVIDER_METADATA,
-      //   name: 'Alchemy',
-      //   supportedChains: [ChainName.ETHEREUM, ChainName.POLYGON, ChainName.SOLANA],
-      // }),
       getProviderName: jest.fn().mockReturnValue('Alchemy'),
       isSupported: jest.fn().mockReturnValue(true),
       getBaseUrl: jest.fn().mockReturnValue('https://eth-mainnet.alchemyapi.io'),
@@ -88,11 +142,6 @@ describe('ProviderFactory', () => {
     };
 
     mockQuicknodeProvider = {
-      // getProviderMetadata: jest.fn().mockReturnValue({
-      //   id: PROVIDER_METADATA,
-      //   name: 'QuickNode',
-      //   supportedChains: [ChainName.ETHEREUM],
-      // }),
       getProviderName: jest.fn().mockReturnValue('QuickNode'),
       isSupported: jest.fn().mockReturnValue(true),
       getBaseUrl: jest.fn().mockReturnValue('https://eth-mainnet.quicknode.io'),
@@ -103,12 +152,19 @@ describe('ProviderFactory', () => {
       get: jest.fn().mockImplementation((token) => {
         if (token === AlchemyProviderFacade) return mockAlchemyFacade;
         if (token === EthereumQuickNodeProvider) return mockQuicknodeProvider;
+        if (token === MockEthereumProvider) return mockEthereumProvider;
         return null;
       }),
     };
 
     mockDiscoveryService = {
-      discoverProviders: jest.fn().mockReturnValue([]),
+      discoverProviders: jest.fn().mockReturnValue([
+        {
+          blockchainType: ChainName.ETHEREUM,
+          providerType: ProviderType.ALCHEMY,
+          providerClass: MockProvider,
+        },
+      ]),
       getRegisteredProviderTypes: jest.fn().mockReturnValue([]),
     };
 
@@ -127,10 +183,17 @@ describe('ProviderFactory', () => {
           provide: ProviderDiscoveryService,
           useValue: mockDiscoveryService,
         },
+        {
+          provide: PROVIDERS_TOKEN,
+          useValue: [],
+        },
       ],
     }).compile();
 
     factory = module.get<ProviderFactory>(ProviderFactory);
+
+    // 手動初始化
+    factory.onModuleInit();
   });
 
   it('should be defined', () => {
@@ -165,6 +228,24 @@ describe('ProviderFactory', () => {
       (factory as any).providers.set(ChainName.ETHEREUM, new Map());
 
       expect(() => factory.getProvider(ChainName.ETHEREUM, 'INVALID_PROVIDER')).toThrow();
+    });
+
+    it('should return a provider for a valid blockchain type and provider type', async () => {
+      jest.spyOn(factory as any, 'getProviderClass').mockReturnValue(MockEthereumProvider);
+
+      const provider = factory.getProvider(ChainName.ETHEREUM, ProviderType.ALCHEMY);
+
+      expect(provider).toBeDefined();
+      expect(provider.getProviderName()).toBe('MockEthereum');
+    });
+
+    it('should cache and return the same provider instance for the same parameters', async () => {
+      jest.spyOn(factory as any, 'getProviderClass').mockReturnValue(MockEthereumProvider);
+
+      const provider1 = factory.getProvider(ChainName.ETHEREUM, ProviderType.ALCHEMY);
+      const provider2 = factory.getProvider(ChainName.ETHEREUM, ProviderType.ALCHEMY);
+
+      expect(provider1).toBe(provider2);
     });
   });
 
@@ -215,10 +296,70 @@ describe('ProviderFactory', () => {
       expect(provider1).toBeDefined();
       expect(provider2).toBeDefined();
     });
+  });
 
-    it('should return empty map for unsupported chain', () => {
-      (factory as any).providers = new Map();
-      expect(() => factory.getProvider('UNSUPPORTED_CHAIN' as ChainName)).toThrow();
+  describe('registerProviders', () => {
+    it('should register providers from manually passed array', () => {
+      const newFactory = new ProviderFactory(
+        mockModuleRef as ModuleRef,
+        mockConfigService as ConfigService,
+        mockDiscoveryService as ProviderDiscoveryService,
+        [
+          {
+            blockchainType: ChainName.SOLANA,
+            providerType: ProviderType.ALCHEMY,
+            providerClass: MockEthereumProvider, // 為了測試目的重用
+          },
+        ],
+      );
+
+      expect((newFactory as any).providers.has(ChainName.SOLANA)).toBeTruthy();
+    });
+  });
+
+  describe('getEthereumProvider', () => {
+    it('should return an Ethereum provider', () => {
+      jest.spyOn(factory, 'getProvider').mockReturnValue(mockEthereumProvider);
+
+      const provider = factory.getEthereumProvider(ProviderType.ALCHEMY);
+
+      expect(provider).toBeDefined();
+      expect((factory.getProvider as any).mock.calls[0]).toEqual([
+        ChainName.ETHEREUM,
+        ProviderType.ALCHEMY,
+      ]);
+    });
+  });
+
+  describe('getSolanaProvider', () => {
+    it('should return a Solana provider', () => {
+      jest.spyOn(factory, 'getProvider').mockReturnValue(mockEthereumProvider);
+
+      const provider = factory.getSolanaProvider(ProviderType.ALCHEMY);
+
+      expect(provider).toBeDefined();
+      expect((factory.getProvider as any).mock.calls[0]).toEqual([
+        ChainName.SOLANA,
+        ProviderType.ALCHEMY,
+      ]);
+    });
+  });
+
+  describe('getEvmProvider', () => {
+    it('should return an EVM provider for a valid chain ID', () => {
+      jest.spyOn(factory as any, 'getChainTypeFromChainId').mockReturnValue(ChainName.ETHEREUM);
+      jest.spyOn(factory, 'getProvider').mockReturnValue(mockEthereumProvider);
+
+      const provider = factory.getEvmProvider(1);
+
+      expect(provider).toBeDefined();
+      expect((factory.getProvider as any).mock.calls[0]).toEqual([ChainName.ETHEREUM, undefined]);
+    });
+
+    it('should throw an error for an invalid chain ID', () => {
+      jest.spyOn(factory as any, 'getChainTypeFromChainId').mockReturnValue(null);
+
+      expect(() => factory.getEvmProvider(99999)).toThrow();
     });
   });
 
@@ -239,6 +380,26 @@ describe('ProviderFactory', () => {
 
       // 驗證 discoveryService.discoverProviders 被調用
       expect(mockDiscoveryService.discoverProviders).toHaveBeenCalled();
+    });
+  });
+
+  describe('listProviders', () => {
+    it('should list all registered providers', () => {
+      // 模擬內部 providers 映射
+      (factory as any).providers = new Map([
+        [
+          ChainName.ETHEREUM,
+          new Map([
+            [ProviderType.ALCHEMY, MockEthereumProvider],
+            [ProviderType.INFURA, MockEthereumProvider],
+          ]),
+        ],
+      ]);
+
+      const providers = factory.listProviders();
+
+      expect(providers.length).toBeGreaterThan(0);
+      expect(providers[0].blockchainType).toBe(ChainName.ETHEREUM);
     });
   });
 });
