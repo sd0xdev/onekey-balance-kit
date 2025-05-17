@@ -41,6 +41,13 @@ export interface NetworkConfig {
   retries: number;
 }
 
+export interface BlockchainConfig {
+  alchemyApiKey?: string;
+  infuraApiKey?: string;
+  moralisApiKey?: string;
+  defaultProviders?: Record<string, string>;
+}
+
 export interface ConfigInterface {
   app: AppConfig;
   database?: DatabaseConfig;
@@ -48,4 +55,5 @@ export interface ConfigInterface {
   redis?: RedisConfig;
   web3?: Web3Config;
   network: NetworkConfig;
+  blockchain?: BlockchainConfig;
 }

@@ -121,16 +121,16 @@ pnpm start:prod
 
 ### 主要端點
 
-| 端點                                      | 說明               |
-| ----------------------------------------- | ------------------ |
-| `GET /v1/balances/:chain/:address`        | 查詢地址資產餘額   |
-| `GET /v1/chains/:chain/validate/:address` | 驗證區塊鏈地址格式 |
-| `POST /v1/webhook`                        | Webhook 接收端點   |
+| 端點                                          | 說明               |
+| --------------------------------------------- | ------------------ |
+| `GET /v1/api/balances/:chain/:address`        | 查詢地址資產餘額   |
+| `GET /v1/api/chains/:chain/validate/:address` | 驗證區塊鏈地址格式 |
+| `POST /v1/api/webhook`                        | Webhook 接收端點   |
 
 ### 餘額查詢示例
 
 ```
-GET /v1/balances/eth/0x1234...5678
+GET /v1/api/balances/eth/0x1234...5678
 ```
 
 **查詢參數**

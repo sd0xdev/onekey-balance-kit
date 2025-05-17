@@ -35,15 +35,15 @@ BalanceService ──────► ChainServiceFactory ──────► C
 
 1. 使用 `@Provider` 裝飾器標記區塊鏈提供者類
 2. `ProviderDiscoveryService` 在應用啟動時自動發現這些提供者
-3. `ProviderFactory` 將發現的提供者註冊並管理實例
+3. `ProviderFactory` 將發現的提供者註冊並管理實例，對於多鏈提供者實現了單例模式優化
 
 ```typescript
 @Provider({
-  blockchainType: [ChainName.ETHEREUM, ChainName.POLYGON, ChainName.BSC], // 支援多個EVM鏈
+  blockchainType: SUPPORTED_ALCHEMY_CHAINS, // 支援多個區塊鏈
   providerType: ProviderType.ALCHEMY,
 })
 @Injectable()
-export class EthereumAlchemyProvider extends AbstractEvmProviderService {
+export class AlchemyMultiChainProvider extends AbstractEvmProviderService {
   // 實現...
 }
 ```
@@ -91,6 +91,15 @@ export interface BlockchainProviderInterface {
 4. 調用 `getBalances()` 方法，該方法內部使用 `ProviderFactory` 獲取適當的提供者
 5. 提供者執行實際的區塊鏈查詢並返回統一格式的結果
 
+## 多鏈提供者
+
+系統支援多鏈提供者實現，這允許一個提供者類支援多個區塊鏈：
+
+1. **實現方式**：在 `@Provider` 裝飾器中指定多個區塊鏈類型
+2. **資源優化**：多鏈提供者使用單例模式，即使有多個服務請求相同的提供者，也只會創建一個實例
+3. **鏈參數傳遞**：所有方法都接受可選的 `chainName` 參數
+4. **單實例多鏈**：通過 `ProviderFactory` 的 `multiChainProviders` 緩存實現高效管理
+
 ## 添加新的區塊鏈提供者
 
 要添加新的區塊鏈提供者，請遵循以下步驟：
@@ -106,7 +115,7 @@ export interface BlockchainProviderInterface {
      providerType: ProviderType.YOUR_PROVIDER,
    })
    @Injectable()
-   export class YourEvmProvider extends AbstractEvmProviderService {
+   export class YourMultiChainProvider extends AbstractEvmProviderService {
      // 實現...
    }
    ```
@@ -131,30 +140,56 @@ export interface BlockchainProviderInterface {
 // 注入 ProviderFactory
 constructor(private readonly providerFactory: ProviderFactory) {}
 
-// 獲取特定提供者
+// 獲取特定鏈的提供者（會自動使用合適的多鏈提供者）
 const evmProvider = this.providerFactory.getProvider(ChainName.ETHEREUM);
 
-// 獲取特定提供者類型
+// 指定提供者類型
 const alchemyProvider = this.providerFactory.getProvider(
   ChainName.ETHEREUM,
   ProviderType.ALCHEMY
 );
 
-// 檢查提供者是否支援特定鏈
-if (evmProvider.supportsChain(ChainName.POLYGON)) {
-  // 使用同一提供者處理Polygon
-  const balances = await evmProvider.getBalances(address, networkType, ChainName.POLYGON);
-}
+// 通過鏈ID獲取EVM提供者
+const polygonProvider = this.providerFactory.getEvmProvider(137); // Polygon主網
+
+// 使用提供者時傳遞鏈名稱
+const balances = await provider.getBalances(address, networkType, ChainName.POLYGON);
 ```
 
 ## 當前支援的提供者
 
-1. **EVM鏈提供者**：
-   - [`EthereumAlchemyProvider`](mdc:src/providers/implementations/ethereum/ethereum-alchemy.provider.ts) - 使用Alchemy API的EVM提供者，支援多個EVM鏈
-   - [`EthereumQuickNodeProvider`](mdc:src/providers/implementations/ethereum/ethereum-quicknode.provider.ts) - 使用QuickNode API的EVM提供者
+1. **多鏈提供者**：
+   - [`AlchemyMultiChainProvider`](mdc:src/providers/implementations/multi-chain/alchemy-multi-chain.provider.ts) - 使用Alchemy API支援多個區塊鏈的提供者，支援以太坊、Polygon和BSC等多個網絡
+   - [`QuickNodeMultiChainProvider`](mdc:src/providers/implementations/multi-chain/quicknode-multi-chain.provider.ts) - 使用QuickNode API的多鏈提供者
 
-2. **Solana提供者**：
-   - [`SolanaAlchemyProvider`](mdc:src/providers/implementations/solana/solana-alchemy.provider.ts) - 使用Alchemy API的Solana提供者
+2. **單鏈專用提供者**：
+   - 針對特定區塊鏈的專用提供者實現
+
+## 多鏈提供者實現模式
+
+多鏈提供者實現遵循以下模式：
+
+1. **鏈客戶端映射**：使用 `Map<ChainName, Client>` 存儲針對每條鏈的客戶端
+2. **鏈名稱解析**：
+   ```typescript
+   private getChainName(networkType: NetworkType, chainName?: ChainName): ChainName {
+     // 如果提供了鏈名稱並支援該鏈，則使用它
+     if (chainName && this.supportedChains.includes(chainName)) {
+       return chainName;
+     }
+     // 否則使用默認鏈
+     return this.defaultChain;
+   }
+   ```
+3. **API金鑰管理**：使用層次化的配置來源：
+   ```typescript
+   // 嘗試按優先順序獲取 API Key：特定鏈 -> 通用前綴 -> 全局配置 -> 默認環境變數
+   const apiKey =
+     this.configService.get<string>(keyEnvVar) ||
+     this.configService.get<string>(fallbackKeyEnvVar) ||
+     this.globalApiKey ||
+     '';
+   ```
 
 ## 多鏈配置管理
 
@@ -181,66 +216,7 @@ export const EVM_CHAIN_INFO_MAP: Record<ChainName, ChainInfo> = {
 };
 ```
 
-提供者可以使用這些映射來獲取特定鏈的配置：
-
-```typescript
-getChainConfig(chainName: ChainName): ChainConfig {
-  const chainInfo = EVM_CHAIN_INFO_MAP[chainName];
-  if (!chainInfo) {
-    throw new Error(`Chain config not found for ${chainName}`);
-  }
-  return {
-    chainId: chainInfo.id,
-    name: chainInfo.display,
-    nativeSymbol: chainInfo.symbol,
-    // ...
-  };
-}
-```
-
-## 鏈特定操作
-
-對於支援多鏈的提供者，所有操作都應接受`chainName`參數：
-
-```typescript
-async getGasPrice(networkType?: NetworkType, chainName?: ChainName): Promise<string> {
-  // 選擇適當的鏈客戶端
-  const client = this.getChainClient(chainName || ChainName.ETHEREUM, networkType);
-  // 執行操作
-  return client.getGasPrice();
-}
-```
-
-## 錯誤處理
-
-區塊鏈提供者遵循統一的錯誤處理機制：
-
-- 使用 [ErrorCode](mdc:src/common/constants/error-codes.ts) 枚舉定義錯誤類型
-- 抛出特定的異常類，如 `ProviderException`
-- 在響應中提供詳細的錯誤信息
-
-示例：
-
-```typescript
-if (!this.supportsChain(chainName)) {
-  throw new ProviderException(
-    ErrorCode.UNSUPPORTED_CHAIN,
-    `Provider ${this.getProviderName()} does not support chain ${chainName}`
-  );
-}
-```
-
-## 提供者實現檢查清單
-
-確保您的提供者實現了以下方法：
-
-- `getProviderName()`: 獲取提供者名稱
-- `getBaseUrl(networkType?, chainName?)`: 獲取API基本URL
-- `getChainConfig(chainName?)`: 獲取鏈配置
-- `getApiKey(networkType?, chainName?)`: 獲取API密鑰
-- `getBalances(address, networkType?, chainName?)`: 獲取餘額
-- `isSupported()`: 檢查提供者是否被支持
-- `supportsChain(chainName)`: 檢查提供者是否支援特定鏈
+提供者可以使用這些映射來獲取特定鏈的配置。
 
 ## 測試網絡支援
 
@@ -292,7 +268,7 @@ export enum ProviderType {
   providerType: ProviderType.YOUR_PROVIDER,
 })
 @Injectable()
-export class YourEvmProvider extends AbstractEvmProviderService {
+export class YourMultiChainProvider extends AbstractEvmProviderService {
   constructor() {
     super();
     this.initSupportedChains([ChainName.CHAIN_1, ChainName.CHAIN_2]);
@@ -325,6 +301,7 @@ export class YourChainService extends AbstractChainService implements BalanceQue
 - 如果返回的數據格式不正確，檢查轉換邏輯
 - 使用日誌記錄診斷問題，例如 `this.logger.debug()`
 - 如果提供者無法識別鏈，檢查 `supportsChain` 方法實現
+- 缺少 API 金鑰時檢查環境配置和金鑰優先順序
 
 ## 向後相容性
 
@@ -346,6 +323,7 @@ getGasPrice(networkType?: NetworkType, chainName?: ChainName): Promise<string>;
 
 ## 主要提供者
 
+- **多鏈提供者**：支援多種區塊鏈，通過單一提供者類處理多條鏈
 - **以太坊提供者**：使用 [ethers](mdc:https:/docs.ethers.org) 庫與以太坊區塊鏈交互
 - **Solana 提供者**：使用 [@solana/web3.js](mdc:https:/solana-labs.github.io/solana-web3.js) 與 Solana 區塊鏈交互
 
@@ -384,7 +362,7 @@ try {
 
 要添加新的區塊鏈提供者，需要：
 
-1. 在 `src/providers/blockchain/` 目錄中創建新的提供者類
+1. 在 `src/providers/implementations/multi-chain/` 目錄中創建新的多鏈提供者類
 2. 在 `StandardChainType` 枚舉中添加新的鏈類型
 3. 在 `BlockchainProviderFactory` 中添加新的提供者處理邏輯
 4. 創建相應的服務類並繼承 `AbstractChainService`
@@ -409,6 +387,8 @@ try {
 目前支援的區塊鏈包括：
 
 - **以太坊** (ETH)：完整支援地址驗證、交易查詢
+- **Polygon** (MATIC)：完整支援地址驗證、交易查詢
+- **BSC** (BNB)：完整支援地址驗證、交易查詢
 - **Solana** (SOL)：完整支援地址驗證、交易查詢
 
 ## 使用方法
@@ -422,6 +402,7 @@ try {
    ```typescript
    // 使用鏈名稱
    const ethService = this.chainServiceFactory.getChainService(ChainName.ETHEREUM);
+   const polygonService = this.chainServiceFactory.getChainService(ChainName.POLYGON);
 
    // 也可使用代幣符號（不區分大小寫）
    const solService = this.chainServiceFactory.getChainService('sol');
@@ -431,6 +412,7 @@ try {
    ```typescript
    const isValid = ethService.isValidAddress('0x...');
    const txHashes = await solService.getAddressTransactionHashes('sol_address');
+   const balances = await polygonService.getBalances('0x...', 137); // 明確指定鏈ID
    ```
 
 ## 擴展新區塊鏈

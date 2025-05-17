@@ -6,19 +6,20 @@ import { ProviderFactory } from './provider.factory';
 import { ProviderDiscoveryService } from './provider-discovery.service';
 import { ProviderType } from './constants/blockchain-types';
 import { PROVIDERS_TOKEN } from './constants/provider-registration';
-import { EthereumAlchemyProvider } from './implementations/ethereum/ethereum-alchemy.provider';
 import { SolanaAlchemyProvider } from './implementations/solana/solana-alchemy.provider';
 import { EthereumQuickNodeProvider } from './implementations/ethereum/ethereum-quicknode.provider';
+import { AlchemyMultiChainProvider } from './implementations/multi-chain/alchemy-multi-chain.provider';
 import { ChainName } from '../chains/constants';
 
 // 創建用於提供者註冊的提供者
 const providersProvider = {
   provide: PROVIDERS_TOKEN,
   useValue: [
+    // 多鏈 Alchemy 提供者
     {
       blockchainType: ChainName.ETHEREUM,
       providerType: ProviderType.ALCHEMY,
-      providerClass: EthereumAlchemyProvider,
+      providerClass: AlchemyMultiChainProvider,
     },
     {
       blockchainType: ChainName.ETHEREUM,
@@ -41,7 +42,7 @@ const providersProvider = {
     providersProvider,
     ProviderFactory,
     ProviderDiscoveryService,
-    EthereumAlchemyProvider,
+    AlchemyMultiChainProvider, // 使用新的多鏈提供者
     EthereumQuickNodeProvider,
     SolanaAlchemyProvider,
     // 通過工廠模式和依賴注入管理提供者

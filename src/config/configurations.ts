@@ -7,6 +7,7 @@ import {
   Web3Config,
   MongoConfig,
   RedisConfig,
+  BlockchainConfig,
 } from './config.interface';
 
 export const appConfig = registerAs(
@@ -68,6 +69,21 @@ export const networkConfig = registerAs(
   }),
 );
 
+export const blockchainConfig = registerAs(
+  ConfigKey.Blockchain,
+  (): BlockchainConfig => ({
+    alchemyApiKey: process.env.ALCHEMY_API_KEY,
+    infuraApiKey: process.env.INFURA_API_KEY,
+    moralisApiKey: process.env.MORALIS_API_KEY,
+    defaultProviders: {
+      ethereum: process.env.DEFAULT_ETH_PROVIDER || 'alchemy',
+      polygon: process.env.DEFAULT_POLYGON_PROVIDER || 'alchemy',
+      bsc: process.env.DEFAULT_BSC_PROVIDER || 'alchemy',
+      solana: process.env.DEFAULT_SOLANA_PROVIDER || 'alchemy',
+    },
+  }),
+);
+
 export const configurations = [
   appConfig,
   databaseConfig,
@@ -75,4 +91,5 @@ export const configurations = [
   redisConfig,
   web3Config,
   networkConfig,
+  blockchainConfig,
 ];

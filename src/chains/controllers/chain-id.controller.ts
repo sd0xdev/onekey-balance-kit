@@ -23,7 +23,7 @@ export class ChainIdController {
   ) {
     return await this.chainRouter.dispatch(chainId, async (service) => {
       if ('getBalances' in service && typeof service.getBalances === 'function') {
-        return await service.getBalances(address, chainId);
+        return await service.getBalances(address, chainId, undefined);
       }
       throw new Error(`鏈ID ${chainId} 不支援餘額查詢`);
     });
