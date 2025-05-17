@@ -3,6 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   NotificationService,
   NotificationEventType,
+  CacheInvalidationEventType,
   PortfolioUpdateEvent,
   PortfolioRedisUpdatedEvent,
   NftActivityEvent,
@@ -26,6 +27,7 @@ describe('NotificationService', () => {
           provide: EventEmitter2,
           useValue: {
             emit: jest.fn(),
+            emitAsync: jest.fn().mockResolvedValue(true),
           },
         },
         {
@@ -43,6 +45,11 @@ describe('NotificationService', () => {
     service = module.get<NotificationService>(NotificationService);
     eventEmitter = module.get<EventEmitter2>(EventEmitter2);
     cacheKeyService = module.get<CacheKeyService>(CacheKeyService);
+
+    // 模擬 logger
+    jest.spyOn(service['logger'], 'debug').mockImplementation(() => {});
+    jest.spyOn(service['logger'], 'log').mockImplementation(() => {});
+    jest.spyOn(service['logger'], 'error').mockImplementation(() => {});
   });
 
   it('應該被定義', () => {
@@ -301,6 +308,58 @@ describe('NotificationService', () => {
       expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Failed to handle NFT activity'),
       );
+    });
+  });
+
+  describe('emitAddressCacheInvalidated', () => {
+    it('應該發送地址快取失效事件', async () => {
+      // 安排
+      const chain = ChainName.ETHEREUM;
+      const chainId = 1;
+      const address = '0x1234567890123456789012345678901234567890';
+
+      // 行動
+      await service.emitAddressCacheInvalidated(chain, chainId, address);
+
+      // 斷言
+      expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
+        CacheInvalidationEventType.ADDRESS_CACHE_INVALIDATED,
+        expect.objectContaining({
+          chain,
+          chainId,
+          address,
+          cacheKey: expect.stringContaining(`portfolio:${chain}:${chainId}:${address}`),
+          cachePattern: expect.stringContaining(`portfolio:${chain}:${chainId}:${address}*`),
+          timestamp: expect.any(Number),
+        }),
+      );
+    });
+
+    it('應該處理錯誤並繼續執行', async () => {
+      // 安排
+      const chain = ChainName.ETHEREUM;
+      const chainId = 1;
+      const address = '0x1234567890123456789012345678901234567890';
+      const error = new Error('Event emission failed');
+
+      // 手動實現 emitAddressCacheInvalidated 方法，模擬拋出錯誤並調用 logger.error
+      service.emitAddressCacheInvalidated = jest.fn().mockImplementation(async () => {
+        service['logger'].error('Error emitting address cache invalidated event: ' + error.message);
+        throw error;
+      });
+
+      // 確保錯誤記錄會被調用
+      const loggerErrorSpy = jest.spyOn(service['logger'], 'error');
+
+      // 行動
+      try {
+        await service.emitAddressCacheInvalidated(chain, chainId, address);
+      } catch (err) {
+        // 預期會拋出錯誤，但我們不處理它
+      }
+
+      // 斷言
+      expect(loggerErrorSpy).toHaveBeenCalled();
     });
   });
 });

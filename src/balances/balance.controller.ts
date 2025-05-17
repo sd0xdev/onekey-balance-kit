@@ -2,6 +2,7 @@ import { Controller, Get, Param } from '@nestjs/common';
 import { BalanceService } from './services/balance.service';
 import { UseBlockchainProvider } from '../chains/decorators/blockchain-provider.decorator';
 import { ApiTags, ApiOperation, ApiParam, ApiOkResponse } from '@nestjs/swagger';
+import { PortfolioResponseDto } from './dto/portfolio.dto';
 
 @ApiTags('balances')
 @Controller('balances')
@@ -25,26 +26,13 @@ export class BalanceController {
   })
   @ApiOkResponse({
     description: '成功獲取地址的資產組合',
-    schema: {
-      type: 'object',
-      properties: {
-        tokens: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              symbol: { type: 'string', example: 'ETH' },
-              balance: { type: 'string', example: '1.25' },
-              value: { type: 'number', example: 2000.5 },
-            },
-          },
-        },
-        totalValue: { type: 'number', example: 5000.75 },
-      },
-    },
+    type: PortfolioResponseDto,
   })
   @UseBlockchainProvider('alchemy') // 設置預設提供者為 alchemy
-  getBalances(@Param('chain') chain: string, @Param('address') address: string) {
+  getBalances(
+    @Param('chain') chain: string,
+    @Param('address') address: string,
+  ): Promise<PortfolioResponseDto> {
     return this.balanceService.getPortfolio(chain, address);
   }
 }
