@@ -315,12 +315,18 @@ A: 參考[區塊鏈提供者](.cursor/rules/blockchain-providers.mdc)文檔，�
 
 - [x] 事件通知中心（業務操作解耦）
 - [x] Webhook 機制
-- [ ] SSE 推送：快取失效／資產變動通知
+- [x] SSE 推送：快取失效／資產變動通知
 - [ ] 精細化快取失效：鏈上活動
 - [ ] 精細化快取失效：資產變動
 - [ ] 精細化快取失效：資產走勢
 
-### 5. DevOps & CI/CD
+### 5. 測試
+
+- [x] 單元測試
+- [x] 覆蓋率報告
+- [x] E2E 測試
+
+### 6. DevOps & CI/CD
 
 - [x] GitHub Actions （CI Pipeline）
   - [x] lint
@@ -337,20 +343,20 @@ A: 參考[區塊鏈提供者](.cursor/rules/blockchain-providers.mdc)文檔，�
 - [x] Google Cloud — Workload Identity Federation （OIDC）
 - [x] Local Webhook 配置
 
-### 6. 前端 Dashboard
+### 7. 前端 Dashboard
 
 - [ ] 資產總覽 Dashboard
 - [ ] 自定義 Provider API Key
 - [ ] 圖表／走勢視覺化（待後端資料完成後對接）
 - [ ] OpenAPI 文件
 
-### 7. 觀測
+### 8. 觀測
 
 - [ ] 性能觀測
 - [ ] 全鏈路追蹤
 - [ ] 告警
 
-### 8. 其他
+### 9. 其他
 
 - [x] GCP 部署指南
 - [x] 環境變數指引
