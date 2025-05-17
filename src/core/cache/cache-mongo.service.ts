@@ -191,16 +191,20 @@ export class CacheMongoService {
       );
 
       // Redis清除作為非阻塞操作啟動，不等待結果
-      const redisPromise = this.cacheKeyService
-        .invalidateChainAddressCache(event.chain, event.chainId, event.address)
-        .catch((err) => {
-          this.logger.error(`Redis 緩存清除出錯: ${err.message}，繼續處理後續操作`);
-          return 0; // 出錯時返回0表示沒有清除任何鍵
-        });
+      const redisPromise = this.cacheKeyService.invalidateChainAddressCache(
+        event.chain,
+        event.chainId,
+        event.address,
+      );
 
-      // 等待MongoDB更新完成
-      const mongoResult = await mongoPromise;
-      this.logger.debug(`MongoDB快取已更新，影響 ${mongoResult} 條記錄`);
+      // 等待 MongoDB 更新完成
+      const [mongoResult, redisResult] = await Promise.allSettled([mongoPromise, redisPromise]);
+      this.logger.debug(
+        `MongoDB快取已更新，影響 ${mongoResult.status === 'fulfilled' ? mongoResult.value : 0} 條記錄`,
+      );
+      this.logger.debug(
+        `Redis快取已更新，影響 ${redisResult.status === 'fulfilled' ? redisResult.value : 0} 條記錄`,
+      );
 
       // 發送快取失效事件通知
       try {
@@ -214,11 +218,6 @@ export class CacheMongoService {
           event.address,
         );
         this.logger.log(`已發送快取失效事件通知: ${event.chain}:${event.chainId}:${event.address}`);
-
-        // 檢查Redis操作的結果，但不阻塞主流程
-        void redisPromise.then((count) => {
-          this.logger.debug(`Redis 緩存清除完成，刪除了 ${count} 個鍵`);
-        });
       } catch (notificationError) {
         this.logger.error(
           `發送快取失效事件通知時出錯: ${notificationError.message}`,

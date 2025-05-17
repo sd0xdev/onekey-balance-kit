@@ -13,7 +13,7 @@ if (!process.env.NODE_ENV) {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // 設置全域驗證管道
   app.useGlobalPipes(

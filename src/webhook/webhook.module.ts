@@ -1,13 +1,18 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef, Global } from '@nestjs/common';
 import { WebhookController } from './webhook.controller';
 import { WebhookService } from './webhook.service';
 import { CoreModule } from '../core/core.module';
 import { NotificationModule } from '../notification/notification.module';
 import { BalancesModule } from '../balances/balances.module';
+import { WebhookManagementService } from './webhook-management.service';
+import { ProvidersModule } from '../providers/providers.module';
+import { HttpModule } from '@nestjs/axios';
 
+@Global()
 @Module({
-  imports: [CoreModule, NotificationModule, BalancesModule],
+  imports: [CoreModule, NotificationModule, BalancesModule, ProvidersModule, HttpModule],
   controllers: [WebhookController],
-  providers: [WebhookService],
+  providers: [WebhookService, WebhookManagementService],
+  exports: [WebhookService, WebhookManagementService],
 })
 export class WebhookModule {}

@@ -4,6 +4,7 @@ import { CacheService } from './cache.service';
 import { CacheKeyService } from './cache-key.service';
 import { CacheMongoService } from './cache-mongo.service';
 import { PortfolioCacheListener } from './portfolio-cache.listener';
+import { PortfolioMongoListener } from './portfolio-mongo.listener';
 import { AppConfigService } from '../../config/config.service';
 import { ConfigsModule } from '../../config';
 import { DbModule } from '../db/db.module';
@@ -49,7 +50,6 @@ interface CustomCacheOptions {
             const redisKeyv = createKeyv(redisUrl, {
               useUnlink: true, // 使用 UNLINK 代替 DEL，性能更好
               clearBatchSize: 1000, // 批量刪除時的批次大小
-              namespace: 'app', // 增加命名空間，避免與其他應用衝突
             });
 
             // 返回包含 Redis 設定的配置
@@ -79,7 +79,13 @@ interface CustomCacheOptions {
       },
     }),
   ],
-  providers: [CacheService, CacheKeyService, CacheMongoService, PortfolioCacheListener],
+  providers: [
+    CacheService,
+    CacheKeyService,
+    CacheMongoService,
+    PortfolioCacheListener,
+    PortfolioMongoListener,
+  ],
   exports: [CacheService, CacheKeyService, CacheMongoService, NestCacheModule],
 })
 export class CacheModule {}
