@@ -5,7 +5,7 @@ alwaysApply: false
 ---
 # OneKeyBalanceKit 專案結構
 
-本專案是一個 NestJS 應用程式，支援以太坊和 Solana 區塊鏈的資產餘額查詢。專案採用模組化設計，目錄結構清晰、職責分離。
+本專案是一個 NestJS 應用程式，支援以太坊（與其他 EVM 兼容鏈）和 Solana 區塊鏈的資產餘額查詢。專案採用模組化設計，目錄結構清晰、職責分離。
 
 ## 主要入口點
 - `src/main.ts` - 應用程式啟動點，設定全局 ValidationPipe、CORS 與中介層
@@ -21,37 +21,59 @@ src/
 ├── app.service.ts
 ├── config/                # 配置模組
 │   ├── configurations.ts
-│   ├── blockchain.config.ts
 │   ├── config-validation.ts
 │   ├── config.service.ts
 │   ├── config.interface.ts
 │   ├── constants.ts
+│   ├── index.ts
 │   └── config.module.ts
 ├── common/                # 共用模組（例外處理、過濾器、常量）
 │   ├── constants/
 │   ├── filters/
 │   └── exceptions/
-├── core/                  # 核心服務模組（資料庫、快取）
+├── core/                  # 核心服務模組
 │   ├── core.module.ts
-│   ├── db/
+│   ├── db/                # 資料庫服務
 │   │   ├── schemas/
 │   │   ├── db.module.ts
 │   │   └── db.service.ts
-│   └── cache/
-│       ├── cache.module.ts
-│       └── cache.service.ts
+│   ├── cache/             # 快取服務
+│   │   ├── cache.module.ts
+│   │   ├── cache.service.ts
+│   │   ├── cache-key.service.ts
+│   │   ├── portfolio-cache.listener.ts
+│   │   └── portfolio-mongo.listener.ts
+│   ├── portfolio/         # 資產組合服務
+│   │   ├── portfolio.module.ts
+│   │   └── portfolio-mongo.listener.ts
+│   ├── redis/             # Redis 服務
+│   │   └── redis.module.ts
+│   └── sse/               # Server-Sent Events 服務
+│       ├── sse.module.ts
+│       ├── sse.controller.ts
+│       ├── sse-subscription.service.ts
+│       └── decorators/
 ├── chains/                # 區塊鏈服務模組
 │   ├── constants/
 │   ├── decorators/
 │   ├── interceptors/
 │   ├── interfaces/
-│   ├── services/
-│   ├── controllers/
 │   ├── chains.module.ts
+│   ├── controllers/
+│   │   ├── chains.controller.ts
+│   │   └── chain-id.controller.ts
+│   ├── services/          # 各鏈服務實現
+│   │   ├── ethereum/
+│   │   ├── solana/
+│   │   ├── bsc/
+│   │   ├── polygon/
+│   │   └── core/
 │   └── index.ts
 ├── balances/              # 餘額查詢模組
 │   ├── balances.module.ts
 │   ├── balance.controller.ts
+│   ├── dto/
+│   │   └── portfolio.dto.ts
 │   └── services/
 │       └── balance.service.ts
 ├── providers/             # 第三方服務提供者模組
@@ -59,32 +81,75 @@ src/
 │   ├── provider.factory.ts
 │   ├── provider-discovery.service.ts
 │   ├── constants/
-│   ├── implementations/
-│   ├── abstract/
+│   │   ├── blockchain-types.ts
+│   │   ├── provider-metadata.ts
+│   │   └── provider-registration.ts
+│   ├── adapters/          # 提供者適配器
+│   │   ├── balance-adapter.factory.ts
+│   │   ├── balance-adapter.interface.ts
+│   │   └── implementations/
+│   ├── strategies/        # 策略模式實現
+│   │   ├── balance-strategy.factory.ts
+│   │   ├── balance-strategy.interface.ts
+│   │   └── implementations/
+│   ├── implementations/   # 具體提供者實現
+│   │   ├── ethereum/
+│   │   ├── solana/
+│   │   └── multi-chain/
+│   ├── abstract/         # 抽象基類
+│   │   ├── abstract-provider.service.ts
+│   │   ├── abstract-ethereum-provider.service.ts
+│   │   ├── abstract-evm-provider.service.ts
+│   │   └── abstract-solana-provider.service.ts
 │   ├── interfaces/
+│   │   ├── blockchain-provider.interface.ts
+│   │   ├── ethereum-provider.interface.ts
+│   │   ├── evm-provider.interface.ts
+│   │   ├── provider-service.interface.ts
+│   │   ├── provider.interface.ts
+│   │   └── solana-provider.interface.ts
 │   └── decorators/
-├── webhook/               # Webhook 處理模組
-│   ├── webhook.module.ts
-│   ├── webhook.controller.ts
-│   ├── webhook.service.ts
-│   ├── dto/
-│   └── utils/
-└── ...                    # 其他輔助資源及測試文件
+│       └── provider.decorator.ts
+├── notification/          # 通知模組
+│   ├── notification.module.ts
+│   └── notification.service.ts
+└── webhook/               # Webhook 處理模組
+    ├── webhook.module.ts
+    ├── webhook.controller.ts
+    ├── webhook.service.ts
+    ├── webhook-management.service.ts
+    ├── webhook-address-reconciliation.service.ts
+    ├── constants/
+    │   └── webhook.constants.ts
+    ├── dto/
+    │   └── webhook-event.dto.ts
+    └── utils/
+        ├── alchemy-network.utils.ts
+        └── signature-validator.ts
 ```
 
 ## 功能模組概覽
-1. **ConfigModule**      - 應用程式配置管理
+1. **ConfigModule**      - 應用程式配置管理，支援環境變數驗證與載入
 2. **CommonModule**      - 共用功能（異常處理、過濾器、常量）
-3. **CoreModule**        - 資料庫（MongoDB）與快取（Redis）服務
-4. **ChainsModule**      - 支援多鏈（Ethereum、Solana）資產與交易查詢
+3. **CoreModule**        - 核心服務，包含資料庫、快取、SSE 與 Redis 服務
+   - **DbModule**        - MongoDB 資料庫服務
+   - **CacheModule**     - 多層快取架構實現
+   - **RedisModule**     - Redis 連接與操作
+   - **SSEModule**       - Server-Sent Events 用於實時通知
+   - **PortfolioModule** - 資產組合管理服務
+4. **ChainsModule**      - 支援多鏈（Ethereum、BSC、Polygon、Solana）資產與交易查詢
 5. **BalancesModule**    - 處理資產餘額查詢請求並整合鏈服務
-6. **ProvidersModule**   - 根據配置自動發現及生成區塊鏈提供者
-7. **WebhookModule**     - 處理鏈上事件 Webhook 通知
+6. **ProvidersModule**   - 根據配置自動發現及生成區塊鏈提供者，支援適配器與策略模式
+7. **WebhookModule**     - 處理鏈上事件 Webhook 通知，監控地址活動
+8. **NotificationModule** - 系統通知服務，支援地址變更事件
 
 ## 配置與工具
-- `eslint.config.mjs`    - ESLint 扁平化配置
-- `tsconfig.json`        - TypeScript 編譯配置
-- `README.md`           - 專案說明
+- `docker-compose-dev.yml` - 開發環境 Docker 配置
+- `Dockerfile`             - 生產環境 Docker 配置
+- `eslint.config.mjs`      - ESLint 扁平化配置
+- `tsconfig.json`          - TypeScript 編譯配置
+- `nest-cli.json`          - NestJS CLI 配置
+- `README.md`              - 專案說明
 
 ## 開發規範
 
@@ -106,15 +171,30 @@ src/
    - 使用 NestJS 的 Logger 服務
    - 記錄關鍵操作和錯誤情況
 
+5. **快取策略**
+   - 遵循三層快取架構（Cloudflare Edge、Redis、MongoDB）
+   - 針對不同資料設置適當的過期時間
+
+6. **測試覆蓋**
+   - 為所有服務和控制器編寫單元測試
+   - 使用 jest 和 supertest 進行端對端測試
+
 ## 擴展指南
 
-要添加對新區塊鏈的支持，請按照以下步驟：
+### 添加新區塊鏈支援
 
-1. 在 `constants/index.ts` 中添加新的鏈類型
-2. 在 `services/` 目錄中創建新的鏈特定目錄和服務類
+1. 在 `chains/constants/index.ts` 中添加新的鏈類型
+2. 在 `chains/services/` 目錄中創建新的鏈特定目錄和服務類
 3. 實現 `ChainService` 介面（推薦繼承 `AbstractChainService`）
 4. 使用 `@Chain()` 裝飾器標記新服務
-5. 創建新的鏈特定模組並在主鏈模組中導入
+5. 在 `chains.module.ts` 中註冊新服務
+
+### 添加新區塊鏈提供者
+
+1. 在 `providers/implementations/` 下創建新的提供者
+2. 實現相應的提供者介面或繼承抽象基類
+3. 使用 `@Provider()` 裝飾器註冊提供者
+4. 提供者將被 `ProviderDiscoveryService` 自動發現並註冊
 
 ## 目錄結構最佳實踐
 
@@ -123,3 +203,4 @@ src/
 - **保持一致性**：所有鏈服務都應遵循相同的目錄結構
 - **避免循環依賴**：確保模組間依賴關係清晰，避免循環引用
 - **單一職責**：每個文件應該專注於單一職責，避免過大的文件
+- **測試目錄**：單元測試應放在 `__tests__` 目錄下或使用 `.spec.ts` 後綴
