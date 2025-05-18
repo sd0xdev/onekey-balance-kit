@@ -63,6 +63,9 @@ export class PortfolioSnapshot extends Document {
   @Prop({ default: 1 })
   schemaVer: number;
 
+  @Prop({ type: Boolean, default: false })
+  webhookMonitored: boolean; // 標記該地址是否已添加到 Alchemy webhook 監控列表
+
   @Prop({
     type: Date,
     required: true,
@@ -94,3 +97,6 @@ PortfolioSnapshotSchema.index({ updatedAt: 1 }, { expireAfterSeconds: 30 * 24 * 
 
 // 設置自定義過期時間索引
 PortfolioSnapshotSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+// 添加 webhookMonitored 欄位索引，用於快速查詢已監控的地址
+PortfolioSnapshotSchema.index({ chain: 1, webhookMonitored: 1, expiresAt: 1 });

@@ -134,12 +134,6 @@ export class CacheMongoService {
         `Invalidated MongoDB cache for ${chain}:${chainId}:${address}, modified ${mongoModifiedCount} records`,
       );
 
-      // 4. 發送地址活動事件，用於通知其他服務
-      this.notificationService.emitAddressActivity(chain, chainId, address, {
-        action: 'cache_invalidated',
-        timestamp: new Date(),
-      });
-
       return deletedCount;
     } catch (error) {
       this.logger.error(
@@ -179,6 +173,9 @@ export class CacheMongoService {
       // 只處理指定的活動類型
       if (event.metadata?.action === 'cache_invalidated') {
         // 避免無限循環：當 invalidateAddressCache 方法發出事件時不再處理
+        this.logger.debug(
+          `跳過處理標記為 'cache_invalidated' 的地址活動事件: ${event.chain}:${event.chainId}:${event.address}`,
+        );
         return;
       }
 
@@ -186,24 +183,52 @@ export class CacheMongoService {
         `CacheMongoService handling address activity: ${event.chain}:${event.chainId}:${event.address}`,
       );
 
-      const [redisResult, mongoResult] = await Promise.allSettled([
-        this.cacheKeyService.invalidateChainAddressCache(event.chain, event.chainId, event.address),
-        this.dbService.invalidateAddressSnapshot(event.chain, event.chainId, event.address),
-      ]);
-
-      this.logger.debug(
-        `Invalidated ${redisResult.status === 'fulfilled' ? redisResult.value : 0} Redis cache entries for ${event.chain}:${event.chainId}:${event.address}`,
+      // 同時啟動 Redis 和 MongoDB 更新，不互相阻塞
+      const mongoPromise = this.dbService.invalidateAddressSnapshot(
+        event.chain,
+        event.chainId,
+        event.address,
       );
 
-      this.logger.debug(
-        `Invalidated ${mongoResult.status === 'fulfilled' ? mongoResult.value : 0} MongoDB cache entries for ${event.chain}:${event.chainId}:${event.address}`,
+      // Redis清除作為非阻塞操作啟動，不等待結果
+      const redisPromise = this.cacheKeyService.invalidateChainAddressCache(
+        event.chain,
+        event.chainId,
+        event.address,
       );
+
+      // 等待 MongoDB 更新完成
+      const [mongoResult, redisResult] = await Promise.allSettled([mongoPromise, redisPromise]);
+      this.logger.debug(
+        `MongoDB快取已更新，影響 ${mongoResult.status === 'fulfilled' ? mongoResult.value : 0} 條記錄`,
+      );
+      this.logger.debug(
+        `Redis快取已更新，影響 ${redisResult.status === 'fulfilled' ? redisResult.value : 0} 條記錄`,
+      );
+
+      // 發送快取失效事件通知
+      try {
+        this.logger.log(
+          `準備調用 emitAddressCacheInvalidated(${event.chain}, ${event.chainId}, ${event.address})`,
+        );
+
+        await this.notificationService.emitAddressCacheInvalidated(
+          event.chain,
+          event.chainId,
+          event.address,
+        );
+        this.logger.log(`已發送快取失效事件通知: ${event.chain}:${event.chainId}:${event.address}`);
+      } catch (notificationError) {
+        this.logger.error(
+          `發送快取失效事件通知時出錯: ${notificationError.message}`,
+          notificationError.stack,
+        );
+      }
     } catch (error) {
       this.logger.error(
         `Failed to handle address activity in CacheMongoService: ${error.message}`,
         error.stack,
       );
-      return;
     }
   }
 }

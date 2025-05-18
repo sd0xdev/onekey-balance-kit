@@ -17,6 +17,7 @@ import { Request } from 'express';
 import { CHAIN_INFO_MAP } from '../../chains/constants';
 import { NotificationService } from '../../notification/notification.service';
 import { BalanceResponse as LegacyBalanceResponse } from '../../chains/interfaces/chain-service.interface';
+import { FungibleToken } from '../../core/db/schemas/portfolio-snapshot.schema';
 
 // 擴展Express的Request介面
 interface RequestWithBlockchainProvider extends Request {
@@ -162,13 +163,6 @@ export class BalanceService {
       if (isBalanceQueryable(chainService)) {
         this.logger.debug(`Chain service implements BalanceQueryable interface`);
         balanceData = await chainService.getBalances(address, chainId, providerFromContext);
-      }
-      // 如果沒有實現新介面，但有舊的 getBalances 方法
-      else if (typeof chainService.getBalances === 'function') {
-        this.logger.debug(`Chain service has legacy getBalances method`);
-        const legacyData = await chainService.getBalances(address, chainId);
-        // 轉換為新格式
-        balanceData = this.convertLegacyBalanceToModern(legacyData, chainService.getChainSymbol());
       } else {
         throw new BalanceException(
           ErrorCode.BALANCE_CHAIN_NOT_SUPPORTED,
@@ -183,6 +177,11 @@ export class BalanceService {
         );
       }
 
+      // 檢查 balanceData 是否是舊格式 (陣列類型)
+      if (Array.isArray(balanceData)) {
+        balanceData = this.convertLegacyBalanceToModern(balanceData, chainService.getChainSymbol());
+      }
+
       // 確保結果具有必要的屬性
       const result: ModernBalanceResponse = {
         nativeBalance: balanceData.nativeBalance || {
@@ -190,7 +189,7 @@ export class BalanceService {
           decimals: 18,
           balance: '0',
         },
-        tokens: balanceData.tokens || [],
+        tokens: this.getTokensFromBalanceData(balanceData),
         nfts: balanceData.nfts || [],
         updatedAt: balanceData.updatedAt || Math.floor(Date.now() / 1000),
       };
@@ -227,5 +226,40 @@ export class BalanceService {
     }
 
     return this.cacheMongoService.invalidateAddressCache(chain, chainId, address);
+  }
+
+  /**
+   * 從餘額數據中安全地獲取代幣列表
+   * 優先使用 fungibles，其次使用 tokens
+   */
+  private getTokensFromBalanceData(
+    balanceData: Record<string, any>,
+  ): Array<FungibleToken | Record<string, any>> {
+    // 定義鏈上代幣資訊的型別，確保回傳型別一致
+    type TokenInfo = {
+      address?: string;
+      mint?: string;
+      symbol?: string;
+      name?: string;
+      balance: string;
+      decimals?: number;
+      usd?: number;
+      logo?: string;
+      tokenMetadata?: {
+        symbol?: string;
+        name?: string;
+        decimals?: number;
+      };
+    };
+
+    if ('fungibles' in balanceData && Array.isArray(balanceData.fungibles)) {
+      return balanceData.fungibles as FungibleToken[];
+    }
+
+    if ('tokens' in balanceData && Array.isArray(balanceData.tokens)) {
+      return balanceData.tokens as TokenInfo[];
+    }
+
+    return [];
   }
 }

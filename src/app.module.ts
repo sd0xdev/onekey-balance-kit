@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
-import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CoreModule } from './core/core.module';
@@ -10,14 +9,14 @@ import { WebhookModule } from './webhook/webhook.module';
 import { ConfigsModule, AppConfigService } from './config';
 import { BalancesModule } from './balances/balances.module';
 import { ChainsModule } from './chains/chains.module';
-import blockchainConfig from './config/blockchain.config';
 import { NotificationModule } from './notification/notification.module';
+import { CacheModule } from './core/cache/cache.module';
+import { SseModule } from './core/sse/sse.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [blockchainConfig],
     }),
     ConfigsModule,
     CoreModule,
@@ -26,8 +25,9 @@ import { NotificationModule } from './notification/notification.module';
     BalancesModule,
     ChainsModule,
     ScheduleModule.forRoot(),
-    EventEmitterModule.forRoot(),
     NotificationModule,
+    CacheModule,
+    SseModule,
   ],
   controllers: [AppController],
   providers: [AppService, AppConfigService],

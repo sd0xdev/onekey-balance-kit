@@ -7,6 +7,9 @@ import {
   Web3Config,
   MongoConfig,
   RedisConfig,
+  BlockchainConfig,
+  WebhookConfig,
+  BlockchainProvidersConfig,
 } from './config.interface';
 
 export const appConfig = registerAs(
@@ -68,6 +71,46 @@ export const networkConfig = registerAs(
   }),
 );
 
+export const blockchainConfig = registerAs(
+  ConfigKey.Blockchain,
+  (): BlockchainConfig => ({
+    alchemyApiKey: process.env.ALCHEMY_API_KEY,
+    alchemyToken: process.env.ALCHEMY_TOKEN,
+    infuraApiKey: process.env.INFURA_API_KEY,
+    moralisApiKey: process.env.MORALIS_API_KEY,
+    defaultProviders: {
+      ethereum: process.env.DEFAULT_ETH_PROVIDER || 'alchemy',
+      polygon: process.env.DEFAULT_POLYGON_PROVIDER || 'alchemy',
+      bsc: process.env.DEFAULT_BSC_PROVIDER || 'alchemy',
+      solana: process.env.DEFAULT_SOLANA_PROVIDER || 'alchemy',
+    },
+    defaultProvider: process.env.DEFAULT_BLOCKCHAIN_PROVIDER || 'alchemy',
+    enabledChains: process.env.ENABLE_CHAINS?.split(',') || ['ETH'],
+    providers: {
+      alchemy: {
+        apiKey: process.env.ALCHEMY_API_KEY || '',
+        baseUrl: process.env.ALCHEMY_BASE_URL || 'https://eth-mainnet.g.alchemy.com/v2/',
+      },
+      quicknode: {
+        apiKey: process.env.QUICKNODE_API_KEY || '',
+        baseUrl: process.env.QUICKNODE_BASE_URL || 'https://api.quicknode.com/',
+      },
+      infura: {
+        apiKey: process.env.INFURA_API_KEY || '',
+        baseUrl: process.env.INFURA_BASE_URL || 'https://mainnet.infura.io/v3/',
+      },
+    },
+  }),
+);
+
+export const webhookConfig = registerAs(
+  ConfigKey.Webhook,
+  (): WebhookConfig => ({
+    url: process.env.WEBHOOK_URL || 'https://your-api-url/webhook',
+    secret: process.env.WEBHOOK_SECRET,
+  }),
+);
+
 export const configurations = [
   appConfig,
   databaseConfig,
@@ -75,4 +118,6 @@ export const configurations = [
   redisConfig,
   web3Config,
   networkConfig,
+  blockchainConfig,
+  webhookConfig,
 ];

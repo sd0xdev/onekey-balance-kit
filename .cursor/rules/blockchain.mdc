@@ -106,7 +106,7 @@ src/chains/
 
 ### 4. API 端點增強
 
-- **基於 chainId 的 API**：`/v1/balances/:chainId/:address` 直接使用 chainId 路由
+- **基於 chainId 的 API**：`/v1/api/balances/:chainId/:address` 直接使用 chainId 路由
 - **網路參數**：原有 API 支援 `network` 和 `chainId` 查詢參數
 - **測試網過濾**：`include_testnet` 參數控制是否包含測試網資訊
 
@@ -181,13 +181,9 @@ export class YourService {
 
 ```
 # 指定chainId直接查詢
-GET /v1/balances/1/0x742d35Cc6634C0532925a3b844Bc454e4438f44e  # 以太坊主網
-GET /v1/balances/5/0x742d35Cc6634C0532925a3b844Bc454e4438f44e  # 以太坊 Goerli 測試網
-GET /v1/balances/137/0x742d35Cc6634C0532925a3b844Bc454e4438f44e  # Polygon 主網
-
-# 使用傳統API並指定網路參數
-GET /balances/ethereum/0x742d35Cc6634C0532925a3b844Bc454e4438f44e?network=testnet
-GET /balances/ethereum/0x742d35Cc6634C0532925a3b844Bc454e4438f44e?chainId=5
+GET /v1/api/balances/ethereum/0x742d35Cc6634C0532925a3b844Bc454e4438f44e  # 以太坊主網
+GET /v1/api/balances/ethereum_sepolia/0x742d35Cc6634C0532925a3b844Bc454e4438f44e  # 以太坊 Sepolia 測試網
+GET /v1/api/balances/polygon/0x742d35Cc6634C0532925a3b844Bc454e4438f44e  # Polygon 主網
 ```
 
 ### 4. 指定區塊鏈提供者
@@ -271,4 +267,74 @@ export const CHAIN_INFO_MAP: Record<string, ChainInfo> = {
 export class ArbitrumService extends AbstractEvmChainService {
   // 實現必要方法...
 }
+```
+
+## 多鏈提供者架構
+
+系統實現了強大的多鏈提供者架構，允許同一個提供者服務多個不同區塊鏈：
+
+### 1. 多鏈提供者設計
+
+- **提供者裝飾器**：`@Provider({ blockchainType: [...chains], providerType: '...' })` 支援多鏈註冊
+- **鏈名稱參數**：所有提供者方法接受 `chainName` 參數，以區分不同鏈的操作
+- **API金鑰管理**：獨立管理每條鏈的 API 金鑰，支援主網/測試網區分
+
+### 2. AlchemyMultiChainProvider 實現
+
+AlchemyMultiChainProvider 是多鏈提供者的範例實現，支援同時操作多條 EVM 鏈和 Solana：
+
+```typescript
+@Provider({
+  blockchainType: [
+    ChainName.ETHEREUM, ChainName.ETHEREUM_SEPOLIA,
+    ChainName.POLYGON, ChainName.POLYGON_MUMBAI,
+    ChainName.BSC, ChainName.BSC_TESTNET,
+    ChainName.SOLANA, ChainName.SOLANA_DEVNET
+  ],
+  providerType: ProviderType.ALCHEMY,
+})
+export class AlchemyMultiChainProvider extends AbstractEvmProviderService {
+  // 實現...
+}
+```
+
+### 3. 動態鏈識別
+
+- **鏈名稱解析**：`getChainName(networkType, chainName)` 方法智能解析適當的鏈
+- **鏈客戶端管理**：`chainClients` Map 維護每個鏈的專用客戶端實例
+- **API金鑰選擇邏輯**：優先使用特定鏈的 API 金鑰，若無則回退到全局金鑰
+
+### 4. 正確的 chainName 傳遞
+
+在使用多鏈提供者時，必須確保正確傳遞 chainName 參數：
+
+```typescript
+// AbstractEvmChainService.getBalances 方法中的關鍵代碼
+const chainInfo = this.getChainInfoByChainId(this.currentChainId);
+const currentChainName = chainInfo ? chainInfo.name : this.evmChain();
+this.logInfo(`Using chain name for provider: ${currentChainName}`);
+
+const balancesResponse = await provider.getBalances(
+  address,
+  networkType,
+  currentChainName as ChainName,
+);
+```
+
+### 5. 環境變數設定
+
+多鏈提供者支援多種形式的 API 金鑰配置：
+
+```
+# 特定鏈的測試網金鑰
+ALCHEMY_API_KEY_ETH_TESTNET=your_key_here
+
+# 特定鏈的主網金鑰
+ALCHEMY_API_KEY_ETH_MAINNET=your_key_here
+
+# 特定鏈的通用金鑰
+ALCHEMY_API_KEY_ETH=your_key_here
+
+# 全局金鑰（所有鏈的後備選項）
+ALCHEMY_API_KEY=your_key_here
 ```

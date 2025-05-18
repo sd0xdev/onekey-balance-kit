@@ -7,9 +7,10 @@ import { ProviderType } from './blockchain-types';
  * 提供者註冊介面
  */
 export interface ProviderRegistration {
-  providerType: ProviderType;
-  blockchainType: ChainName;
+  providerType: ProviderType | string;
+  blockchainType: ChainName | string;
   providerClass: Type<BlockchainProviderInterface>;
+  originalBlockchainType?: ChainName | ChainName[] | string | string[]; // 可選參數，保存原始區塊鏈類型
 }
 
 /**
@@ -17,8 +18,8 @@ export interface ProviderRegistration {
  */
 export class ProviderDescriptor {
   constructor(
-    public readonly blockchainType: ChainName,
-    public readonly providerType: ProviderType,
+    public readonly blockchainType: ChainName | string,
+    public readonly providerType: ProviderType | string,
   ) {}
 
   toString(): string {

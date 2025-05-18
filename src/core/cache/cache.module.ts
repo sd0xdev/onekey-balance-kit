@@ -4,6 +4,7 @@ import { CacheService } from './cache.service';
 import { CacheKeyService } from './cache-key.service';
 import { CacheMongoService } from './cache-mongo.service';
 import { PortfolioCacheListener } from './portfolio-cache.listener';
+import { PortfolioMongoListener } from './portfolio-mongo.listener';
 import { AppConfigService } from '../../config/config.service';
 import { ConfigsModule } from '../../config';
 import { DbModule } from '../db/db.module';
@@ -78,7 +79,13 @@ interface CustomCacheOptions {
       },
     }),
   ],
-  providers: [CacheService, CacheKeyService, CacheMongoService, PortfolioCacheListener],
+  providers: [
+    CacheService,
+    CacheKeyService,
+    CacheMongoService,
+    PortfolioCacheListener,
+    PortfolioMongoListener,
+  ],
   exports: [CacheService, CacheKeyService, CacheMongoService, NestCacheModule],
 })
 export class CacheModule {}

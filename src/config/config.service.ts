@@ -8,6 +8,8 @@ import {
   Web3Config,
   MongoConfig,
   RedisConfig,
+  BlockchainConfig,
+  WebhookConfig,
 } from './config.interface';
 
 @Injectable()
@@ -42,6 +44,16 @@ export class AppConfigService {
   get network(): NetworkConfig {
     const config = this.configService.get<NetworkConfig>(ConfigKey.Network as string);
     return config || ({} as NetworkConfig);
+  }
+
+  get blockchain(): BlockchainConfig {
+    const config = this.configService.get<BlockchainConfig>(ConfigKey.Blockchain as string);
+    return config || ({} as BlockchainConfig);
+  }
+
+  get webhook(): WebhookConfig {
+    const config = this.configService.get<WebhookConfig>(ConfigKey.Webhook as string);
+    return config || ({} as WebhookConfig);
   }
 
   // 便捷方法，簡化常用配置項的訪問

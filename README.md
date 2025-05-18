@@ -1,7 +1,7 @@
 # OneKeyBalanceKit
 
 [![CI](https://github.com/sd0xdev/onekey-balance-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/sd0xdev/onekey-balance-kit/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/sd0xdev/onekey-balance-kit/branch/main/graph/badge.svg)](https://codecov.io/gh/sd0xdev/onekey-balance-kit)
+[![codecov](https://codecov.io/gh/sd0xdev/onekey-balance-kit/graph/badge.svg?token=159I3Z37RP)](https://codecov.io/gh/sd0xdev/onekey-balance-kit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-22.x-brightgreen.svg)](https://nodejs.org/)
 [![NestJS](https://img.shields.io/badge/NestJS-11.x-red.svg)](https://nestjs.com/)
@@ -38,6 +38,9 @@
   - MongoDB 持久層：歷史數據分析與回溯
 
 - **實時數據更新**：通過 Webhook 機制實現數據即時更新
+  - 支援 Alchemy 的地址活動監控
+  - 自動清理過期監控地址
+  - 智能快取失效，避免不必要的數據請求
 - **高可用與可擴展**：微服務架構，支持水平擴展
 - **完整類型支持**：使用 TypeScript 開發，100% 類型覆蓋
 - **完善的錯誤處理**：標準化的錯誤碼與提示信息
@@ -121,16 +124,16 @@ pnpm start:prod
 
 ### 主要端點
 
-| 端點                                      | 說明               |
-| ----------------------------------------- | ------------------ |
-| `GET /v1/balances/:chain/:address`        | 查詢地址資產餘額   |
-| `GET /v1/chains/:chain/validate/:address` | 驗證區塊鏈地址格式 |
-| `POST /v1/webhook`                        | Webhook 接收端點   |
+| 端點                                          | 說明               |
+| --------------------------------------------- | ------------------ |
+| `GET /v1/api/balances/:chain/:address`        | 查詢地址資產餘額   |
+| `GET /v1/api/chains/:chain/validate/:address` | 驗證區塊鏈地址格式 |
+| `POST /v1/api/webhook`                        | Webhook 接收端點   |
 
 ### 餘額查詢示例
 
 ```
-GET /v1/balances/eth/0x1234...5678
+GET /v1/api/balances/eth/0x1234...5678
 ```
 
 **查詢參數**
@@ -167,6 +170,7 @@ GET /v1/balances/eth/0x1234...5678
 - [ESLint 配置](.cursor/rules/eslint-config.mdc)：程式碼風格與質量規範
 - [Nest.js 最佳實踐](.cursor/rules/nestjs-patterns.mdc)：框架使用指南
 - [專案結構](.cursor/rules/project-structure.mdc)：目錄結構與模組說明
+- [Webhook 機制](.cursor/rules/webhook.mdc)：區塊鏈地址監控與事件處理
 
 ### 部署與架構文檔
 
@@ -315,12 +319,18 @@ A: 參考[區塊鏈提供者](.cursor/rules/blockchain-providers.mdc)文檔，�
 
 - [x] 事件通知中心（業務操作解耦）
 - [x] Webhook 機制
-- [ ] SSE 推送：快取失效／資產變動通知
+- [x] SSE 推送：快取失效／資產變動通知
 - [ ] 精細化快取失效：鏈上活動
 - [ ] 精細化快取失效：資產變動
 - [ ] 精細化快取失效：資產走勢
 
-### 5. DevOps & CI/CD
+### 5. 測試
+
+- [x] 單元測試
+- [x] 覆蓋率報告
+- [x] E2E 測試
+
+### 6. DevOps & CI/CD
 
 - [x] GitHub Actions （CI Pipeline）
   - [x] lint
@@ -337,20 +347,20 @@ A: 參考[區塊鏈提供者](.cursor/rules/blockchain-providers.mdc)文檔，�
 - [x] Google Cloud — Workload Identity Federation （OIDC）
 - [x] Local Webhook 配置
 
-### 6. 前端 Dashboard
+### 7. 前端 Dashboard
 
 - [ ] 資產總覽 Dashboard
 - [ ] 自定義 Provider API Key
 - [ ] 圖表／走勢視覺化（待後端資料完成後對接）
 - [ ] OpenAPI 文件
 
-### 7. 觀測
+### 8. 觀測
 
 - [ ] 性能觀測
 - [ ] 全鏈路追蹤
 - [ ] 告警
 
-### 8. 其他
+### 9. 其他
 
 - [x] GCP 部署指南
 - [x] 環境變數指引

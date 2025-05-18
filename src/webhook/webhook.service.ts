@@ -12,6 +12,7 @@ import {
 import { WebhookEvent } from '../core/db/schemas/webhook-event.schema';
 import { ChainName, NETWORK_ID_TO_CHAIN_MAP, getChainIdFromNetworkId } from '../chains/constants';
 import { NotificationService } from '../notification/notification.service';
+import { AlchemyNetworkUtils } from './utils/alchemy-network.utils';
 
 @Injectable()
 export class WebhookService {
@@ -31,16 +32,16 @@ export class WebhookService {
       // 2. 根據事件類型處理
       switch (payload.type) {
         case WebhookEventType.ADDRESS_ACTIVITY:
-          this.handleAddressActivity(payload);
+          await this.handleAddressActivity(payload);
           break;
         case WebhookEventType.TOKEN_ACTIVITY:
           this.logger.debug('Token activity event received - handling not yet implemented');
           break;
         case WebhookEventType.NFT_ACTIVITY:
-          this.handleNftActivity(payload);
+          await this.handleNftActivity(payload);
           break;
         case WebhookEventType.MINED_TRANSACTION:
-          this.handleMinedTransaction(payload);
+          await this.handleMinedTransaction(payload);
           break;
         case WebhookEventType.DROPPED_TRANSACTION:
           this.handleDroppedTransaction(payload);
@@ -82,7 +83,7 @@ export class WebhookService {
    * 處理地址活動事件
    * 使該地址的所有緩存失效並重新獲取最新數據
    */
-  private handleAddressActivity(payload: WebhookEventDto): void {
+  private async handleAddressActivity(payload: WebhookEventDto): Promise<void> {
     try {
       const event = payload.event as AddressActivityEvent;
       const network = event.network;
@@ -135,7 +136,7 @@ export class WebhookService {
    * 處理NFT活動事件
    * 更新NFT擁有權和元數據
    */
-  private handleNftActivity(payload: WebhookEventDto): void {
+  private async handleNftActivity(payload: WebhookEventDto): Promise<void> {
     try {
       const event = payload.event as NftActivityEvent;
       const network = event.network;
@@ -195,7 +196,7 @@ export class WebhookService {
   /**
    * 處理已挖出交易事件
    */
-  private handleMinedTransaction(payload: WebhookEventDto): void {
+  private async handleMinedTransaction(payload: WebhookEventDto): Promise<void> {
     try {
       const event = payload.event as MinedTransactionEvent;
       const network = event.network;
@@ -267,12 +268,12 @@ export class WebhookService {
     }
   }
 
+  /**
+   * 將 Alchemy 網絡 ID 轉換為 ChainName
+   * @param network Alchemy 網絡 ID 字符串
+   * @returns 對應的鏈名稱或 null
+   */
   private mapNetworkToChainType(network: string): ChainName | null {
-    const chainName = NETWORK_ID_TO_CHAIN_MAP[network];
-    if (!chainName) {
-      this.logger.warn(`Unknown network type: ${network}`);
-      return null;
-    }
-    return chainName;
+    return AlchemyNetworkUtils.getChainNameFromNetworkId(network);
   }
 }

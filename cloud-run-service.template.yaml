@@ -35,6 +35,8 @@ spec:
               value: ${API_BASE_URL}
             - name: CORS_ORIGIN
               value: '${CORS_ORIGIN}'
+            - name: WEBHOOK_URL
+              value: ${WEBHOOK_URL}
             - name: NETWORK_TIMEOUT
               value: '30000'
             - name: NETWORK_RETRIES
@@ -110,6 +112,11 @@ spec:
                 secretKeyRef:
                   name: ${SECRET_PREFIX}_ALCHEMY_API_KEY_SOL
                   key: latest
+            - name: ALCHEMY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ${SECRET_PREFIX}_ALCHEMY_TOKEN
+                  key: latest
             - name: QUICKNODE_ETH_MAINNET_URL
               valueFrom:
                 secretKeyRef:
@@ -148,14 +155,14 @@ spec:
           # ---- Health checks ----
           startupProbe:
             httpGet:
-              path: /v1/health
+              path: /v1/api/health
               port: 8080
             initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /v1/health
+              path: /v1/api/health
               port: 8080
             periodSeconds: 30
             failureThreshold: 3
