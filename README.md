@@ -38,6 +38,9 @@
   - MongoDB 持久層：歷史數據分析與回溯
 
 - **實時數據更新**：通過 Webhook 機制實現數據即時更新
+  - 支援 Alchemy 的地址活動監控
+  - 自動清理過期監控地址
+  - 智能快取失效，避免不必要的數據請求
 - **高可用與可擴展**：微服務架構，支持水平擴展
 - **完整類型支持**：使用 TypeScript 開發，100% 類型覆蓋
 - **完善的錯誤處理**：標準化的錯誤碼與提示信息
@@ -167,6 +170,7 @@ GET /v1/api/balances/eth/0x1234...5678
 - [ESLint 配置](.cursor/rules/eslint-config.mdc)：程式碼風格與質量規範
 - [Nest.js 最佳實踐](.cursor/rules/nestjs-patterns.mdc)：框架使用指南
 - [專案結構](.cursor/rules/project-structure.mdc)：目錄結構與模組說明
+- [Webhook 機制](.cursor/rules/webhook.mdc)：區塊鏈地址監控與事件處理
 
 ### 部署與架構文檔
 

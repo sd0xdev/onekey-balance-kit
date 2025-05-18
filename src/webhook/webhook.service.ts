@@ -12,6 +12,7 @@ import {
 import { WebhookEvent } from '../core/db/schemas/webhook-event.schema';
 import { ChainName, NETWORK_ID_TO_CHAIN_MAP, getChainIdFromNetworkId } from '../chains/constants';
 import { NotificationService } from '../notification/notification.service';
+import { AlchemyNetworkUtils } from './utils/alchemy-network.utils';
 
 @Injectable()
 export class WebhookService {
@@ -267,12 +268,12 @@ export class WebhookService {
     }
   }
 
+  /**
+   * 將 Alchemy 網絡 ID 轉換為 ChainName
+   * @param network Alchemy 網絡 ID 字符串
+   * @returns 對應的鏈名稱或 null
+   */
   private mapNetworkToChainType(network: string): ChainName | null {
-    const chainName = NETWORK_ID_TO_CHAIN_MAP[network];
-    if (!chainName) {
-      this.logger.warn(`Unknown network type: ${network}`);
-      return null;
-    }
-    return chainName;
+    return AlchemyNetworkUtils.getChainNameFromNetworkId(network);
   }
 }

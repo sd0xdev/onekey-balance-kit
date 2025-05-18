@@ -5,6 +5,8 @@ import { lastValueFrom } from 'rxjs';
 import { ChainName } from '../chains/constants';
 import { AppConfigService } from '../config/config.service';
 import { ConfigKey } from '../config/constants';
+import { AlchemyNetworkUtils } from './utils/alchemy-network.utils';
+import { DEFAULT_MONITORED_ADDRESS } from './constants/webhook.constants';
 
 /**
  * Alchemy webhook 回應介面
@@ -94,7 +96,7 @@ export class WebhookManagementService {
 
       for (const chain of supportedChains) {
         // 獲取對應的 Alchemy 網絡
-        const network = this.getAlchemyNetworkForChain(chain);
+        const network = AlchemyNetworkUtils.getAlchemyNetworkForChain(chain);
         if (!network) {
           this.logger.warn(`無法為 ${chain} 建立 Alchemy SDK 客戶端: 不支援的網絡`);
           continue;
@@ -128,19 +130,7 @@ export class WebhookManagementService {
    * @returns Alchemy 網絡
    */
   private getAlchemyNetworkForChain(chain: ChainName): Network | null {
-    const networkMapping: Partial<Record<ChainName, Network>> = {
-      [ChainName.ETHEREUM]: Network.ETH_MAINNET,
-      [ChainName.ETHEREUM_GOERLI]: Network.ETH_GOERLI,
-      [ChainName.ETHEREUM_SEPOLIA]: Network.ETH_SEPOLIA,
-      [ChainName.POLYGON]: Network.MATIC_MAINNET,
-      [ChainName.POLYGON_MUMBAI]: Network.MATIC_MUMBAI,
-      [ChainName.BSC]: Network.BNB_MAINNET,
-      [ChainName.BSC_TESTNET]: Network.BNB_TESTNET,
-      [ChainName.SOLANA]: Network.SOLANA_MAINNET,
-      [ChainName.SOLANA_DEVNET]: Network.SOLANA_DEVNET,
-    };
-
-    return networkMapping[chain] || null;
+    return AlchemyNetworkUtils.getAlchemyNetworkForChain(chain);
   }
 
   /**
@@ -268,7 +258,7 @@ export class WebhookManagementService {
    * 獲取當前所有 webhook
    * @returns webhook 列表
    */
-  private async getExistingWebhooks(): Promise<AlchemyWebhookResponse[] | null> {
+  public async getExistingWebhooks(): Promise<AlchemyWebhookResponse[] | null> {
     try {
       if (!this.alchemyToken) {
         return null;
@@ -427,7 +417,7 @@ export class WebhookManagementService {
         this.webhookUrl,
         WebhookType.ADDRESS_ACTIVITY,
         {
-          addresses: ['0x710a850ff60aa2f8e9e27ef1e7edef17a2e682d2'], // 初始地址必須 > 0 個
+          addresses: [DEFAULT_MONITORED_ADDRESS], // 使用預設監控地址
           network: Network[chain],
         },
       );
@@ -458,29 +448,101 @@ export class WebhookManagementService {
    * @returns Alchemy 網絡 ID
    */
   private getNetworkIdForChain(chain: ChainName): string {
-    // 這裡需要根據實際情況映射鏈名到 Alchemy 網絡 ID
-    switch (chain) {
-      case ChainName.ETHEREUM:
-        return 'ETH_MAINNET';
-      case ChainName.ETHEREUM_GOERLI:
-        return 'ETH_GOERLI';
-      case ChainName.ETHEREUM_SEPOLIA:
-        return 'ETH_SEPOLIA';
-      case ChainName.POLYGON:
-        return 'MATIC_MAINNET';
-      case ChainName.POLYGON_MUMBAI:
-        return 'MATIC_MUMBAI';
-      case ChainName.BSC:
-        return 'BNB_MAINNET';
-      case ChainName.BSC_TESTNET:
-        return 'BNB_TESTNET';
-      case ChainName.SOLANA:
-        return 'SOLANA_MAINNET';
-      case ChainName.SOLANA_DEVNET:
-        return 'SOLANA_DEVNET';
-      default:
-        this.logger.warn(`未知的鏈: ${chain}，預設使用 ETH_MAINNET`);
-        return 'ETH_MAINNET';
+    const networkId = AlchemyNetworkUtils.getNetworkIdForChain(chain);
+    if (!networkId) {
+      this.logger.warn(`未知的鏈: ${chain}，預設使用 ETH_MAINNET`);
+      return 'ETH_MAINNET';
+    }
+    return networkId;
+  }
+
+  /**
+   * 獲取當前 webhook 上訂閱的地址列表
+   * @param chain 區塊鏈名稱
+   * @returns 訂閱地址列表
+   */
+  async getMonitoredAddresses(chain: ChainName): Promise<string[]> {
+    try {
+      if (!this.alchemyToken) {
+        this.logger.error('Cannot get monitored addresses: Alchemy token is not configured');
+        return [];
+      }
+
+      // 獲取該鏈的 webhook ID
+      const webhookId = await this.getWebhookIdForChain(chain);
+      if (!webhookId) {
+        this.logger.error(`No webhook found for chain: ${chain}`);
+        return [];
+      }
+
+      // 使用 HTTP API 獲取 webhook 詳細信息
+      try {
+        const response = await lastValueFrom(
+          this.httpService.get(`${this.alchemyApiUrl}/team-webhooks/${webhookId}`, {
+            headers: {
+              'X-Alchemy-Token': this.alchemyToken,
+            },
+          }),
+        );
+
+        if (response.status === 200 && response.data?.data) {
+          const webhookDetails = response.data.data;
+          return webhookDetails.addresses || [];
+        } else {
+          this.logger.warn(`無法獲取 webhook ${webhookId} 的詳細信息: ${response.status}`);
+          return [];
+        }
+      } catch (apiError: unknown) {
+        const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+        this.logger.error(`API 請求獲取 webhook 詳情時發生錯誤: ${errorMessage}`);
+        return [];
+      }
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `獲取 ${chain} 的已監控地址時發生錯誤: ${errorMessage}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * 獲取webhook底下的地址列表
+   * @param chain 區塊鏈名稱
+   * @param webhookId webhook ID
+   * @returns webhook下的地址列表
+   */
+  public async getWebhookDetailsWithSdk(chain: ChainName, webhookId: string): Promise<string[]> {
+    try {
+      if (!this.alchemyToken) {
+        this.logger.error('Alchemy token is not configured');
+        return [];
+      }
+
+      // 使用 Alchemy SDK 獲取 webhook 底下的地址列表
+      const client = this.alchemySDKClients.get(chain);
+      if (!client) {
+        this.logger.error(`No Alchemy SDK client for chain: ${chain}`);
+        return [];
+      }
+
+      try {
+        // 使用 SDK 的 notify.getAddresses 方法獲取地址列表
+        const addressesResponse = await client.notify.getAddresses(webhookId);
+        return addressesResponse.addresses || [];
+      } catch (httpError: unknown) {
+        const httpErrorMessage = httpError instanceof Error ? httpError.message : String(httpError);
+        this.logger.error(`獲取webhook地址列表時發生錯誤: ${httpErrorMessage}`);
+        return [];
+      }
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `獲取webhook地址列表時發生錯誤: ${errorMessage}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      return [];
     }
   }
 }
