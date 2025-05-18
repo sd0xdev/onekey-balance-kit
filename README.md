@@ -11,6 +11,9 @@
   <img src="https://raw.githubusercontent.com/sd0xdev/onekey-balance-kit/main/docs/assets/logo.png" alt="OneKeyBalanceKit Logo" width="200">
 </p>
 
+<video
+src="https://raw.githubusercontent.com/sd0xdev/onekey-balance-kit/main/docs/assets/demo.mp4" width="640" height="360" controls muted></video>
+
 <p align="center">
   <a href="https://raw.githubusercontent.com/sd0xdev/onekey-balance-kit/main/docs/assets/demo.mp4">
     <img src="https://img.shields.io/badge/查看演示視頻-點擊觀看-blue?style=for-the-badge&logo=github" alt="查看演示視頻">
