@@ -6,6 +6,7 @@ export enum ConfigKey {
   Mongo = 'mongo',
   Redis = 'redis',
   Blockchain = 'blockchain',
+  Webhook = 'webhook',
 }
 
 export enum Environment {

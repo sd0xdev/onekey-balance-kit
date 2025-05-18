@@ -13,7 +13,7 @@ if (!process.env.NODE_ENV) {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // 設置全域驗證管道
   app.useGlobalPipes(
@@ -49,7 +49,22 @@ async function bootstrap() {
     },
   });
 
-  app.enableCors(); // 允許跨域請求
+  // 配置 CORS
+  if (process.env.NODE_ENV === 'production') {
+    // 生產環境使用環境變數中的指定來源
+    const allowedOrigin = process.env.CORS_ORIGIN;
+    app.enableCors({
+      origin: allowedOrigin,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      credentials: true,
+    });
+    console.log(`CORS 已設置為僅允許來源: ${allowedOrigin}`);
+  } else {
+    // 開發環境允許所有來源
+    app.enableCors();
+    console.log('CORS 已設置為允許所有來源 (開發環境)');
+  }
+
   app.setGlobalPrefix('/v1/api'); // API版本前綴
   const port = parseInt(process.env.PORT || '3000', 10);
   await app.listen(port);

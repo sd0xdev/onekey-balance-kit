@@ -9,7 +9,6 @@ import { WebhookModule } from './webhook/webhook.module';
 import { ConfigsModule, AppConfigService } from './config';
 import { BalancesModule } from './balances/balances.module';
 import { ChainsModule } from './chains/chains.module';
-import blockchainConfig from './config/blockchain.config';
 import { NotificationModule } from './notification/notification.module';
 import { CacheModule } from './core/cache/cache.module';
 import { SseModule } from './core/sse/sse.module';
@@ -18,7 +17,6 @@ import { SseModule } from './core/sse/sse.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [blockchainConfig],
     }),
     ConfigsModule,
     CoreModule,

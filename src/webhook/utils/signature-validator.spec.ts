@@ -14,9 +14,9 @@ jest.mock('crypto', () => {
 describe('validateAlchemySignature', () => {
   // 測試數據
   const mockSecret = 'test-webhook-secret';
-  const mockPayload = '{"data":"test"}';
-  const mockSignature = 'sha256=1234567890abcdef';
-  const mockComputedSignature = '1234567890abcdef';
+  const mockPayload = Buffer.from('{"data":"test"}');
+  const mockSignature = 'sha256=1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
+  const mockComputedSignature = '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
 
   beforeEach(() => {
     // 重置模擬函數
@@ -28,6 +28,9 @@ describe('validateAlchemySignature', () => {
       digest: jest.fn().mockReturnValue(mockComputedSignature),
     };
     (crypto.createHmac as jest.Mock).mockReturnValue(hmacMock);
+
+    // 默認設置 timingSafeEqual 為 true
+    (crypto.timingSafeEqual as jest.Mock).mockReturnValue(true);
   });
 
   it('當簽名與計算出的簽名匹配時，應該返回 true', () => {
@@ -61,8 +64,8 @@ describe('validateAlchemySignature', () => {
     expect(result).toBe(true);
     // 確認 timingSafeEqual 被調用時正確處理了前綴
     expect(crypto.timingSafeEqual).toHaveBeenCalledWith(
-      Buffer.from('1234567890abcdef'),
-      Buffer.from(mockComputedSignature),
+      Buffer.from(mockComputedSignature, 'hex'),
+      Buffer.from(mockComputedSignature, 'hex'),
     );
   });
 
@@ -99,6 +102,15 @@ describe('validateAlchemySignature', () => {
   it('當簽名和密鑰都為空時，應該返回 false', () => {
     // 執行驗證
     const result = validateAlchemySignature('', mockPayload, '');
+
+    // 驗證結果
+    expect(result).toBe(false);
+    expect(crypto.createHmac).not.toHaveBeenCalled();
+  });
+
+  it('當簽名長度不為 64 時，應該返回 false', () => {
+    // 執行驗證
+    const result = validateAlchemySignature('sha256=1234', mockPayload, mockSecret);
 
     // 驗證結果
     expect(result).toBe(false);

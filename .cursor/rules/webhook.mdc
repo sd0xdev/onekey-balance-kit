@@ -1,0 +1,78 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Webhook 機制
+
+這個文檔說明了系統的 webhook 機制，主要用於監控區塊鏈地址活動並觸發相關的業務邏輯。
+
+## 核心組件
+
+### WebhookManagementService
+
+[src/webhook/webhook-management.service.ts](mdc:src/webhook/webhook-management.service.ts) 是 webhook 管理的核心服務，負責：
+
+- 初始化 Alchemy SDK 客戶端
+- 創建和管理 webhook
+- 更新監控的地址列表
+- 獲取 webhook 詳情和 signing key
+
+服務在初始化時會為每個支援的區塊鏈創建對應的 Alchemy SDK 客戶端，並使用 `alchemyToken` 和 `alchemyApiKey` 進行認證。
+
+### WebhookService
+
+[src/webhook/webhook.service.ts](mdc:src/webhook/webhook.service.ts) 負責處理接收到的 webhook 事件：
+
+- 處理地址活動事件（轉賬、代幣交易等）
+- 處理 NFT 活動事件（轉移等）
+- 處理已挖出的交易事件
+- 處理 GraphQL 自定義事件
+
+當接收到事件後，會使用 NotificationService 發送通知，觸發緩存失效和資料更新。
+
+### WebhookAddressReconciliationService
+
+[src/webhook/webhook-address-reconciliation.service.ts](mdc:src/webhook/webhook-address-reconciliation.service.ts) 負責定期檢查和清理 webhook 上的地址：
+
+- 定期（每日凌晨 3 點）執行地址校正任務
+- 檢查每個監控地址是否有效（是否有未過期的記錄）
+- 移除過期或不存在的地址，但永遠保留預設監控地址
+
+### 工具類和常量
+
+- [src/webhook/utils/alchemy-network.utils.ts](mdc:src/webhook/utils/alchemy-network.utils.ts) 提供 Alchemy 網絡 ID 與系統內部鏈名稱的映射
+- [src/webhook/constants/webhook.constants.ts](mdc:src/webhook/constants/webhook.constants.ts) 定義了預設監控地址等常量
+
+## 運作流程
+
+1. 系統啟動時初始化 WebhookManagementService，創建 Alchemy SDK 客戶端
+2. 當需要監控新地址時，調用 updateWebhookAddresses 方法添加地址
+3. 當 Alchemy 偵測到地址活動時，會發送 webhook 事件到系統
+4. WebhookService 處理這些事件，並觸發相應的業務邏輯
+5. WebhookAddressReconciliationService 定期清理過期地址，保持系統效率
+
+## 重要特性
+
+- **預設監控地址**：系統使用 DEFAULT_MONITORED_ADDRESS 常量定義的地址作為永久監控地址，該地址不會被自動清理
+- **網絡映射**：使用 AlchemyNetworkUtils 統一管理網絡 ID 與鏈名稱的映射
+- **緩存機制**：使用內存緩存儲存 webhook ID 和 signing key，提高效率
+- **定期清理**：自動移除過期或不再需要監控的地址
+
+## 使用示例
+
+要開始監控一個新地址：
+
+```typescript
+// 注入服務
+constructor(private webhookManagementService: WebhookManagementService) {}
+
+// 添加監控地址
+async addAddressToMonitor(chain: ChainName, address: string) {
+  await this.webhookManagementService.updateWebhookAddresses(
+    chain,
+    [address], // 要添加的地址
+    []          // 要移除的地址
+  );
+}
+```
