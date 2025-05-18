@@ -11,8 +11,7 @@
   <img src="https://raw.githubusercontent.com/sd0xdev/onekey-balance-kit/main/docs/assets/logo.png" alt="OneKeyBalanceKit Logo" width="200">
 </p>
 
-<video
-src="https://raw.githubusercontent.com/sd0xdev/onekey-balance-kit/main/docs/assets/demo.mp4" width="640" height="360" controls muted></video>
+<video src="https://github.com/user-attachments/assets/e65033dc-85bb-44b0-922f-32f5cadb5742" width="640" height="360" controls muted></video>
 
 <p align="center">
   <a href="https://raw.githubusercontent.com/sd0xdev/onekey-balance-kit/main/docs/assets/demo.mp4">
