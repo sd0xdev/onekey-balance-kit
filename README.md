@@ -6,6 +6,7 @@
 [![Node.js Version](https://img.shields.io/badge/node-22.x-brightgreen.svg)](https://nodejs.org/)
 [![NestJS](https://img.shields.io/badge/NestJS-11.x-red.svg)](https://nestjs.com/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/sd0xdev/onekey-balance-kit)
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/sd0xdev/onekey-balance-kit/main/docs/assets/logo.png" alt="OneKeyBalanceKit Logo" width="200">
