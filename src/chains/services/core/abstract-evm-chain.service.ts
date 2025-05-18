@@ -266,21 +266,7 @@ export abstract class AbstractEvmChainService
         );
       }
 
-      // 如果沒有可用的提供者或提供者調用失敗，使用默認實現
-      this.logInfo('Using default implementation for balances');
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      return {
-        chainId: this.currentChainId,
-        nativeBalance: {
-          symbol: this.getChainSymbol() || 'UNKNOWN',
-          decimals: this.meta?.decimals || 18,
-          balance: '1000000000000000000', // 1 單位
-          usd: 0,
-        },
-        fungibles: [],
-        nfts: [],
-        updatedAt: Math.floor(Date.now() / 1000),
-      };
+      throw new Error(`Provider ${selectedProviderType} is not working`);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logError(`Failed to get ${this.getChainName()} balances: ${errorMessage}`);

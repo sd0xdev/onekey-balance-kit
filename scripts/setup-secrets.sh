@@ -3,9 +3,10 @@
 # set -e
 
 # 此腳本用於將環境變數設置到 Google Cloud Secret Manager
-# 用法: ./scripts/setup-secrets.sh [env-file] [environment-name] [specific-key]
+# 用法: ./scripts/setup-secrets.sh [env-file] [environment-name] [specific-keys]
 # 例如: ./scripts/setup-secrets.sh .env.staging staging
 # 或指定特定密鑰: ./scripts/setup-secrets.sh .env.staging staging MONGO_URL
+# 或指定多個密鑰(用逗號分隔): ./scripts/setup-secrets.sh .env.staging staging REDIS_HOST,REDIS_PORT,REDIS_PASSWORD
 
 # 顏色設置
 GREEN='\033[0;32m'
@@ -22,14 +23,14 @@ else
   DEFAULT_ENV_NAME="production"
 fi
 ENV_NAME=${2:-$DEFAULT_ENV_NAME}  # 如果提供了第二個參數，使用該參數；否則使用從檔案名提取的環境名稱
-SPECIFIC_KEY=${3:-""}  # 可選的特定密鑰參數
+SPECIFIC_KEYS=${3:-""}  # 可選的特定密鑰參數，可以是逗號分隔的多個密鑰
 PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project)}"
 SERVICE_ACCOUNT_NAME="${SERVICE_ACCOUNT_NAME:-github-actions-runner}"
 UPDATE_MODE=false  # 預設非更新模式
 
 # 白名單變數（這些變數將被跳過，不上傳到 Secret Manager）
 # 這些變數是從 cloud-run-service.template.yaml 中直接設定的，不需要存在 Secret Manager 中
-SKIP_VARS=("NODE_ENV" "PORT" "APP_NAME" "LOG_LEVEL" "API_BASE_URL" "CORS_ORIGIN" "NETWORK_TIMEOUT" "NETWORK_RETRIES")
+SKIP_VARS=("NODE_ENV" "PORT" "APP_NAME" "LOG_LEVEL" "API_BASE_URL" "CORS_ORIGIN" "NETWORK_TIMEOUT" "NETWORK_RETRIES" "WEBHOOK_URL")
 
 # 檢查變數是否在白名單中
 is_in_skip_list() {
@@ -42,40 +43,30 @@ is_in_skip_list() {
   return 1  # 不在白名單中，返回 false
 }
 
-# 檢查環境變數是否設置
-if [ -z "$PROJECT_ID" ]; then
-  echo -e "${RED}錯誤: 未設置 PROJECT_ID 環境變數${NC}"
-  echo -e "${YELLOW}請先執行 source .env.gcp 或設置 PROJECT_ID 環境變數${NC}"
-  exit 1
-fi
+# 處理單個密鑰
+process_specific_key() {
+  local key="$1"
 
-echo -e "${GREEN}使用專案 ID: $PROJECT_ID${NC}"
-echo -e "${GREEN}從檔案載入環境變數: $ENV_FILE${NC}"
-echo -e "${GREEN}目標環境: ${ENV_NAME}${NC}"
-echo -e "${GREEN}服務帳號: $SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com${NC}"
-
-# 如果指定了特定密鑰，顯示相關信息
-if [ ! -z "$SPECIFIC_KEY" ]; then
-  echo -e "${GREEN}僅處理指定密鑰: $SPECIFIC_KEY${NC}"
-
-  # 檢查特定密鑰是否在白名單中
-  if is_in_skip_list "$SPECIFIC_KEY"; then
-    echo -e "${RED}錯誤: 指定的密鑰 '$SPECIFIC_KEY' 在白名單中，無法處理${NC}"
-    exit 1
+  # 檢查密鑰是否在白名單中
+  if is_in_skip_list "$key"; then
+    echo -e "${RED}錯誤: 指定的密鑰 '$key' 在白名單中，無法處理${NC}"
+    return 1
   fi
 
-  # 檢查特定密鑰是否已存在
-  secret_name="${ENV_NAME}_${SPECIFIC_KEY}"
+  # 檢查密鑰是否已存在
+  local secret_name="${ENV_NAME}_${key}"
+  local update_this_key=false
+
   if gcloud secrets describe "$secret_name" --project $PROJECT_ID &> /dev/null; then
     echo -e "${YELLOW}密鑰 $secret_name 已存在，將更新該密鑰${NC}"
-    UPDATE_MODE=true
+    update_this_key=true
   else
     echo -e "${GREEN}將創建新密鑰: $secret_name${NC}"
   fi
 
   # 從環境文件中尋找密鑰值
-  found_in_file=false
-  specific_value=""
+  local found_in_file=false
+  local specific_value=""
 
   if [ -f "$ENV_FILE" ]; then
     while IFS= read -r line || [ -n "$line" ]; do
@@ -84,14 +75,14 @@ if [ ! -z "$SPECIFIC_KEY" ]; then
       [[ -z $line ]] && continue
 
       # 解析變數名稱和值
-      key=$(echo $line | cut -d '=' -f 1)
+      local line_key=$(echo $line | cut -d '=' -f 1)
 
       # 如果找到指定的密鑰
-      if [[ "$key" == "$SPECIFIC_KEY" ]]; then
-        value=$(echo $line | cut -d '=' -f 2-)
+      if [[ "$line_key" == "$key" ]]; then
+        local value=$(echo $line | cut -d '=' -f 2-)
         found_in_file=true
         specific_value="$value"
-        echo -e "${GREEN}在環境文件中找到密鑰 $SPECIFIC_KEY ${NC}"
+        echo -e "${GREEN}在環境文件中找到密鑰 $key ${NC}"
         echo -e "${GREEN}密鑰值預覽${NC}: ${value:0:3}$([[ ${#value} -gt 3 ]] && echo '***')"
         break
       fi
@@ -100,8 +91,8 @@ if [ ! -z "$SPECIFIC_KEY" ]; then
 
   # 如果在文件中沒找到，詢問用戶
   if [[ "$found_in_file" != true ]]; then
-    echo -e "${YELLOW}在環境文件 $ENV_FILE 中未找到密鑰 $SPECIFIC_KEY${NC}"
-    read -p "請輸入 $SPECIFIC_KEY 的值 (輸入空值將創建空值密鑰): " specific_value
+    echo -e "${YELLOW}在環境文件 $ENV_FILE 中未找到密鑰 $key${NC}"
+    read -p "請輸入 $key 的值 (輸入空值將創建空值密鑰): " specific_value
   fi
 
   # 確認繼續
@@ -112,17 +103,20 @@ if [ ! -z "$SPECIFIC_KEY" ]; then
   fi
   echo ""
   if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo -e "${YELLOW}操作已取消${NC}"
-    exit 0
+    echo -e "${YELLOW}跳過此密鑰${NC}"
+    return 0
   fi
 
   # 確保 Secret Manager API 已啟用
-  echo "確保 Secret Manager API 已啟用..."
-  gcloud services enable secretmanager.googleapis.com --project $PROJECT_ID || echo -e "${YELLOW}啟用 Secret Manager API 失敗，可能已啟用${NC}"
+  if [[ "$API_ENABLED" != true ]]; then
+    echo "確保 Secret Manager API 已啟用..."
+    gcloud services enable secretmanager.googleapis.com --project $PROJECT_ID || echo -e "${YELLOW}啟用 Secret Manager API 失敗，可能已啟用${NC}"
+    API_ENABLED=true
+  fi
 
   # 處理特定密鑰
   echo "處理密鑰: $secret_name"
-  if [[ "$UPDATE_MODE" == true ]]; then
+  if [[ "$update_this_key" == true ]]; then
     echo -e "${YELLOW}更新現有密鑰 $secret_name...${NC}"
     echo -n "$specific_value" | gcloud secrets versions add "$secret_name" --data-file=- --project $PROJECT_ID || echo -e "${RED}更新密鑰失敗: $secret_name${NC}"
   else
@@ -134,7 +128,7 @@ if [ ! -z "$SPECIFIC_KEY" ]; then
   fi
 
   # 授予 Cloud Run 服務帳號存取權限
-  SERVICE_ACCOUNT="$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com"
+  local SERVICE_ACCOUNT="$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com"
 
   # 檢查服務帳號是否存在
   if ! gcloud iam service-accounts describe $SERVICE_ACCOUNT --project $PROJECT_ID &> /dev/null; then
@@ -149,9 +143,42 @@ if [ ! -z "$SPECIFIC_KEY" ]; then
   fi
 
   echo -e "${GREEN}已成功設置密鑰: $secret_name${NC}"
-  echo -e "${GREEN}可以使用以下命令查看密鑰:${NC}"
-  echo -e "gcloud secrets versions access latest --secret=$secret_name --project=${PROJECT_ID}"
+  return 0
+}
 
+# 檢查環境變數是否設置
+if [ -z "$PROJECT_ID" ]; then
+  echo -e "${RED}錯誤: 未設置 PROJECT_ID 環境變數${NC}"
+  echo -e "${YELLOW}請先執行 source .env.gcp 或設置 PROJECT_ID 環境變數${NC}"
+  exit 1
+fi
+
+echo -e "${GREEN}使用專案 ID: $PROJECT_ID${NC}"
+echo -e "${GREEN}從檔案載入環境變數: $ENV_FILE${NC}"
+echo -e "${GREEN}目標環境: ${ENV_NAME}${NC}"
+echo -e "${GREEN}服務帳號: $SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com${NC}"
+
+# 標記API是否已啟用
+API_ENABLED=false
+
+# 如果指定了特定密鑰，處理這些密鑰
+if [ ! -z "$SPECIFIC_KEYS" ]; then
+  # 將逗號分隔的字符串轉換為數組
+  IFS=',' read -ra KEY_ARRAY <<< "$SPECIFIC_KEYS"
+
+  if [ ${#KEY_ARRAY[@]} -gt 1 ]; then
+    echo -e "${GREEN}將處理 ${#KEY_ARRAY[@]} 個密鑰: ${SPECIFIC_KEYS//,/, }${NC}"
+  else
+    echo -e "${GREEN}僅處理指定密鑰: $SPECIFIC_KEYS${NC}"
+  fi
+
+  # 遍歷所有密鑰並處理
+  for key in "${KEY_ARRAY[@]}"; do
+    echo -e "\n${YELLOW}================= 處理密鑰: $key =================${NC}"
+    process_specific_key "$key"
+  done
+
+  echo -e "\n${GREEN}所有指定的密鑰處理完成！${NC}"
   exit 0
 fi
 
@@ -179,6 +206,7 @@ fi
 # 確保 Secret Manager API 已啟用
 echo "確保 Secret Manager API 已啟用..."
 gcloud services enable secretmanager.googleapis.com --project $PROJECT_ID || echo -e "${YELLOW}啟用 Secret Manager API 失敗，可能已啟用${NC}"
+API_ENABLED=true
 
 # 讀取環境檔案並創建密鑰
 if [ -f "$ENV_FILE" ]; then

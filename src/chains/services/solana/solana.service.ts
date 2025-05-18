@@ -226,57 +226,16 @@ export class SolanaService extends AbstractChainService implements BalanceQuerya
         );
       }
 
-      // 如果沒有可用的提供者或提供者調用失敗，使用默認實現
-      this.logInfo('Using default implementation for balances');
-      return {
-        cluster,
-        nativeBalance: {
-          symbol: SOL_SYMBOL,
-          decimals: SOL_DECIMALS,
-          balance: '1000000000', // 1 SOL (lamports)
-          usd: 100, // 假設 SOL 價格為 $100
-        },
-        tokens: [
-          {
-            mint: 'TokenMintAddress1',
-            balance: '100000000',
-            tokenMetadata: {
-              symbol: 'TOKEN',
-              decimals: 9,
-              name: 'Example Token',
-            },
-          },
-        ],
-        nfts: [
-          {
-            mint: 'NftMintAddress1',
-            tokenId: '1',
-            tokenMetadata: {
-              name: 'Example NFT',
-              image: 'https://example.com/nft.png',
-              collection: {
-                name: 'Example Collection',
-              },
-            },
-          },
-        ],
-        updatedAt: Math.floor(Date.now() / 1000),
-      };
+      throw new Error(`Provider ${selectedProviderType} is not working`);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logError(`Failed to get Solana balances: ${errorMessage}`);
-      return {
-        cluster: this.isTestnet() ? SolanaCluster.TESTNET : SolanaCluster.MAINNET,
-        nativeBalance: {
-          symbol: SOL_SYMBOL,
-          decimals: SOL_DECIMALS,
-          balance: '0',
-          usd: 0,
-        },
-        tokens: [],
-        nfts: [],
-        updatedAt: Math.floor(Date.now() / 1000),
-      };
+      throw error;
     }
+  }
+
+  // 添加 validateAddress 方法
+  validateAddress(address: string): boolean {
+    return this.isValidAddress(address);
   }
 }

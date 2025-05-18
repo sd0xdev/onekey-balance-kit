@@ -11,6 +11,12 @@
   <img src="https://raw.githubusercontent.com/sd0xdev/onekey-balance-kit/main/docs/assets/logo.png" alt="OneKeyBalanceKit Logo" width="200">
 </p>
 
+<p align="center">
+  <a href="https://raw.githubusercontent.com/sd0xdev/onekey-balance-kit/main/docs/assets/demo.mp4">
+    <img src="https://img.shields.io/badge/查看演示視頻-點擊觀看-blue?style=for-the-badge&logo=github" alt="查看演示視頻">
+  </a>
+</p>
+
 > 一個高性能、可擴展的多鏈資產餘額查詢服務，支持以太坊和 Solana 區塊鏈，提供統一的 API 接口來查詢地址的原生代幣、ERC-20/SPL 代幣和 NFT 資產。
 
 ## 📑 目錄
@@ -274,6 +280,9 @@ A: 參考[區塊鏈提供者](.cursor/rules/blockchain-providers.mdc)文檔，�
 - [x] ETH Mainnet MVP
 - [x] 多鏈抽象（EVM／L2／BTC／Solana／Discovery）
   - [x] 服務註冊 / 發現 / 路由
+  - [x] Price Provider
+    - [x] Mock Price Provider
+    - [ ] OKX Price Provider
   - [x] EVM 鏈抽象
     - [x] Base
     - [x] Optimism

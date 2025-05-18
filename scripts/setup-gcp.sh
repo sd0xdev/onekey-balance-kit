@@ -17,6 +17,18 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+# ---------- 自動檢查並加載 .env.gcp ----------
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+ENV_FILE="${ROOT_DIR}/.env.gcp"
+
+if [[ -f "$ENV_FILE" ]]; then
+  echo -e "${GREEN}發現 .env.gcp 文件，自動加載...${NC}"
+  source "$ENV_FILE"
+else
+  echo -e "${YELLOW}未找到 .env.gcp 文件，將使用當前環境變數${NC}"
+fi
+
 # ---------- Environment checks ----------
 if [[ -z "${PROJECT_ID:-}" ]]; then
   echo -e "${RED}錯誤: 未設置 PROJECT_ID 環境變數${NC}"
@@ -64,6 +76,8 @@ gcloud services enable \
   iam.googleapis.com \
   iamcredentials.googleapis.com \
   secretmanager.googleapis.com \
+  cloudbuild.googleapis.com \
+  storage.googleapis.com \
   --project "$PROJECT_ID"
 
 # ---------- Artifact Registry ----------
@@ -95,6 +109,12 @@ roles=(
   roles/run.admin
   roles/iam.serviceAccountUser
   roles/secretmanager.secretAccessor
+  roles/cloudbuild.builds.editor
+  roles/storage.objectViewer
+  roles/serviceusage.serviceUsageConsumer
+  # 添加必要的最小權限來解決 Cloud Build 存儲桶訪問問題
+  roles/cloudbuild.builds.builder
+  roles/storage.objectCreator  # 只添加建立物件權限，而非完整的 Admin
 )
 for r in "${roles[@]}"; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
@@ -103,6 +123,26 @@ for r in "${roles[@]}"; do
 done
 
 echo -e "${GREEN}權限已授予${NC}"
+
+# ---------- Grant roles to Cloud Build Service Account ----------
+echo "授予 Cloud Build 服務帳號權限..."
+CB_SERVICE_ACCOUNT="${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com"
+cb_roles=(
+  roles/artifactregistry.writer
+  roles/run.admin
+  roles/storage.objectViewer
+  roles/serviceusage.serviceUsageConsumer
+  # 添加必要的最小權限
+  roles/cloudbuild.builds.builder
+  roles/storage.objectCreator  # 只添加建立物件權限
+)
+for r in "${cb_roles[@]}"; do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:${CB_SERVICE_ACCOUNT}" \
+    --role="$r" --condition=None 2>/dev/null || true
+done
+
+echo -e "${GREEN}Cloud Build 權限已授予${NC}"
 
 # ---------- Workload Identity Pool ----------
 if gcloud iam workload-identity-pools describe "$POOL_ID" --location=global --project "$PROJECT_ID" &>/dev/null; then

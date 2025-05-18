@@ -1,11 +1,8 @@
-# GitHub Actions – Deploy to Google Cloud Run (4-job pipeline)
-# ─────────────────────────────────────────────────────────────
+# GitHub Actions – Deploy to Google Cloud Run (簡化版)
+# ───────────────────────────────────────────
 # jobs:
-# build_push      → 產生 & 推送映像，輸出 image_tag / image_env_tag
-# scan_image      → Trivy 掃描，依賴 build_push
-# generate_manifest → 產生 Cloud Run manifest，依賴 build_push
-# deploy          → 部署 Cloud Run，依賴 generate_manifest
-# ─────────────────────────────────────────────────────────────
+# cloud_build     → 調用 Google Cloud Build 進行所有工作
+# ───────────────────────────────────────────
 
 name: Deploy to Google Cloud Run
 
@@ -32,28 +29,14 @@ permissions:
 
 jobs:
   # =============================================================
-  # 1) Build & Push Docker Image
+  # Cloud Build Job - 單一 Job 取代舊的 4-Job pipeline
   # =============================================================
-  build_push:
-    name: 🏗️ Build & Push
+  cloud_build:
+    name: 🚀 Cloud Build & Deploy
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
-    outputs:
-      image_tag: ${{ steps.vars.outputs.IMAGE_TAG }}
-      image_env: ${{ steps.vars.outputs.IMAGE_ENV_TAG }}
-      image_path: ${{ steps.vars.outputs.IMAGE_PATH }}
-      env_suffix: ${{ steps.vars.outputs.ENV_SUFFIX }}
-      secret_prefix: ${{ steps.vars.outputs.SECRET_PREFIX }}
-      max_instances: ${{ steps.vars.outputs.MAX_INSTANCES }}
-      node_env: ${{ steps.vars.outputs.NODE_ENV }}
-      log_level: ${{ steps.vars.outputs.LOG_LEVEL }}
-      api_base_url: ${{ steps.vars.outputs.API_BASE_URL }}
-      cors_origin: ${{ steps.vars.outputs.CORS_ORIGIN }}
-      webhook_url: ${{ steps.vars.outputs.WEBHOOK_URL }}
-      deploy_tag: ${{ steps.vars.outputs.DEPLOY_TAG }}
-      environment: ${{ steps.vars.outputs.ENVIRONMENT }}
     steps:
       # --- Checkout ---------------------------------------------------------
       - uses: actions/checkout@v4
@@ -65,56 +48,14 @@ jobs:
         run: |
           set -e
           ENVIRONMENT="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'staging') }}"
-          if [[ "$ENVIRONMENT" == "production" ]]; then
-            ENV_SUFFIX=""
-            IMAGE_SUFFIX=""
-            NODE_ENV="production"
-            MAX_INSTANCES=2
-            LOG_LEVEL=""
-            API_BASE_URL="${{ vars.PROD_API_BASE_URL || 'https://api-onekeybalance.sd0.tech' }}"
-            CORS_ORIGIN="${{ vars.PROD_CORS_ORIGIN || 'https://onekeybalance.sd0.tech' }}"
-            WEBHOOK_URL="${{ vars.PROD_WEBHOOK_URL || 'https://api-onekeybalance.sd0.tech/v1/api/webhook' }}"
-            SECRET_PREFIX="production"
-            SERVICE_NAME="one-key-balance-kit"
-            CACHE_TTL=3600
-            DEPLOY_TAG=""
-          else
-            ENV_SUFFIX="-dev"
-            IMAGE_SUFFIX="-dev"
-            NODE_ENV="development"
-            MAX_INSTANCES=1
-            LOG_LEVEL="debug"
-            API_BASE_URL="${{ vars.DEV_API_BASE_URL || 'https://staging-api-onekeybalance.sd0.tech' }}"
-            CORS_ORIGIN="${{ vars.DEV_CORS_ORIGIN || '*' }}"
-            WEBHOOK_URL="${{ vars.DEV_WEBHOOK_URL || 'https://staging-api-onekeybalance.sd0.tech/v1/api/webhook' }}"
-            SECRET_PREFIX="staging"
-            SERVICE_NAME="one-key-balance-kit-dev"
-            CACHE_TTL=1800
-            DEPLOY_TAG="--tag=dev"
-          fi
-          IMAGE_TAG="${{ github.sha }}"
-          IMAGE_ENV_TAG="$ENVIRONMENT"
-          if [[ "$ENVIRONMENT" == "production" ]]; then
-            IMAGE_PATH="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/one-key-balance-kit/api"
-          else
-            IMAGE_PATH="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/one-key-balance-kit/api-dev"
-          fi
+          echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
+          echo "_ENV=$ENVIRONMENT" >> $GITHUB_ENV
 
-          # 設置輸出變數
-          echo "ENVIRONMENT=$ENVIRONMENT"           >> $GITHUB_OUTPUT
-          echo "ENV_SUFFIX=$ENV_SUFFIX"             >> $GITHUB_OUTPUT
-          echo "IMAGE_SUFFIX=$IMAGE_SUFFIX"         >> $GITHUB_OUTPUT
-          echo "NODE_ENV=$NODE_ENV"                 >> $GITHUB_OUTPUT
-          echo "LOG_LEVEL=$LOG_LEVEL"               >> $GITHUB_OUTPUT
-          echo "API_BASE_URL=$API_BASE_URL"         >> $GITHUB_OUTPUT
-          echo "CORS_ORIGIN=$CORS_ORIGIN"           >> $GITHUB_OUTPUT
-          echo "WEBHOOK_URL=$WEBHOOK_URL"           >> $GITHUB_OUTPUT
-          echo "SECRET_PREFIX=$SECRET_PREFIX"       >> $GITHUB_OUTPUT
-          echo "MAX_INSTANCES=$MAX_INSTANCES"       >> $GITHUB_OUTPUT
-          echo "IMAGE_TAG=$IMAGE_TAG"               >> $GITHUB_OUTPUT
-          echo "IMAGE_ENV_TAG=$IMAGE_ENV_TAG"       >> $GITHUB_OUTPUT
-          echo "IMAGE_PATH=$IMAGE_PATH"             >> $GITHUB_OUTPUT
-          echo "DEPLOY_TAG=$DEPLOY_TAG"             >> $GITHUB_OUTPUT
+          if [[ "$ENVIRONMENT" == "production" ]]; then
+            echo "_MAX_INSTANCES=2" >> $GITHUB_ENV
+          else
+            echo "_MAX_INSTANCES=1" >> $GITHUB_ENV
+          fi
 
       # --- Auth -------------------------------------------------------------
       - name: 🔑 Auth to GCP
@@ -127,204 +68,63 @@ jobs:
         with:
           project_id: ${{ env.PROJECT_ID }}
 
-      - name: 🐳 Configure Artifact Registry
-        shell: bash
-        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --project $PROJECT_ID
-
-      # --- Build & push -----------------------------------------------------
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-
-      - name: 📦 Build & Push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ steps.vars.outputs.IMAGE_PATH }}:${{ steps.vars.outputs.IMAGE_TAG }}
-            ${{ steps.vars.outputs.IMAGE_PATH }}:${{ steps.vars.outputs.IMAGE_ENV_TAG }}
-            ${{ steps.vars.outputs.IMAGE_PATH }}:latest
-          build-args: |
-            NODE_ENV=${{ steps.vars.outputs.NODE_ENV }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # =============================================================
-  # 2) Scan Image (depends on build)
-  # =============================================================
-  scan_image:
-    name: 🔍 Scan Image
-    runs-on: ubuntu-latest
-    needs: build_push
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: 設定 GCR 映像路徑
-        id: set-image
-        run: |
-          ENV_SUFFIX="${{ needs.build_push.outputs.env_suffix }}"
-          IMAGE_TAG="${{ needs.build_push.outputs.image_tag }}"
-          if [ "$ENV_SUFFIX" == "-dev" ]; then
-            IMAGE_PATH="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/one-key-balance-kit/api-dev"
-          else
-            IMAGE_PATH="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/one-key-balance-kit/api"
-          fi
-
-          # 輸出給後續步驟使用
-          echo "image_path=${IMAGE_PATH}" >> $GITHUB_OUTPUT
-          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
-
-      - name: 🔑 Auth to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: 🐳 Configure Docker
-        run: |
-          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
-          IMAGE_PATH="${{ steps.set-image.outputs.image_path }}"
-          IMAGE_TAG="${{ steps.set-image.outputs.image_tag }}"
-          if [ -z "$IMAGE_PATH" ]; then
-            echo "錯誤: IMAGE_PATH 為空"
-            exit 1
-          fi
-          if [ -z "$IMAGE_TAG" ]; then
-            echo "錯誤: IMAGE_TAG 為空"
-            exit 1
-          fi
-          docker pull ${IMAGE_PATH}:${IMAGE_TAG}
-
-      - name: Trivy scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: '${{ steps.set-image.outputs.image_path }}:${{ steps.set-image.outputs.image_tag }}'
-          format: sarif
-          output: trivy-results.sarif
-          severity: CRITICAL,HIGH
-
-  # =============================================================
-  # 3) Generate manifest  (depends on build)
-  # =============================================================
-  generate_manifest:
-    name: 📝 Generate Manifest
-    runs-on: ubuntu-latest
-    needs: build_push
-    permissions:
-      contents: read
-    outputs:
-      manifest: cloud-run-service.generated.yaml
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Create manifest file
+      # --- 調用 Cloud Build --------------------------------------------------
+      - name: 🏗️ Cloud Build
+        id: build
         shell: bash
         run: |
           set -e
-          ENV_SUFFIX='${{ needs.build_push.outputs.env_suffix }}'
-          ENVIRONMENT='${{ needs.build_push.outputs.environment }}'
-          MAX_INSTANCES='${{ needs.build_push.outputs.max_instances }}'
-          REGION='${{ env.REGION }}'
-          PROJECT_ID='${{ env.PROJECT_ID }}'
-          IMAGE_SUFFIX='${{ needs.build_push.outputs.image_suffix }}'
-          IMAGE_TAG='${{ needs.build_push.outputs.image_tag }}'
-          NODE_ENV='${{ needs.build_push.outputs.node_env }}'
-          LOG_LEVEL='${{ needs.build_push.outputs.log_level }}'
-          API_BASE_URL='${{ needs.build_push.outputs.api_base_url }}'
-          CORS_ORIGIN='${{ needs.build_push.outputs.cors_origin }}'
-          WEBHOOK_URL='${{ needs.build_push.outputs.webhook_url }}'
-          SECRET_PREFIX='${{ needs.build_push.outputs.secret_prefix }}'
-          if [[ "$CORS_ORIGIN" == "*" ]]; then CORS_ORIGIN='"*"'; fi
-
-          # 確保映像路徑正確
-          if [[ "$ENVIRONMENT" == "production" ]]; then
-            IMAGE_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/one-key-balance-kit/api"
+          # 先設置環境變數，讓後續可以直接用 Bash 變數
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "_ENV=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "_ENV=production" >> $GITHUB_ENV
           else
-            IMAGE_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/one-key-balance-kit/api-dev"
+            echo "_ENV=staging" >> $GITHUB_ENV
           fi
 
-          # 顯示將用於部署的映像
-          echo "部署使用的映像: ${IMAGE_PATH}:${IMAGE_TAG}"
+          # 設置 REGION (避免重複使用 ${{ env.XXX }})
+          echo "REGION=${{ vars.GCP_REGION || 'asia-east1' }}" >> $GITHUB_ENV
 
-          sed -e "s|\${ENV_SUFFIX}|$ENV_SUFFIX|g" \
-              -e "s|\${ENVIRONMENT}|$ENVIRONMENT|g" \
-              -e "s|\${MAX_INSTANCES}|$MAX_INSTANCES|g" \
-              -e "s|\${REGION}|$REGION|g" \
-              -e "s|\${PROJECT_ID}|$PROJECT_ID|g" \
-              -e "s|\${IMAGE_SUFFIX}|$IMAGE_SUFFIX|g" \
-              -e "s|\${IMAGE_TAG}|$IMAGE_TAG|g" \
-              -e "s|\${NODE_ENV}|$NODE_ENV|g" \
-              -e "s|\${LOG_LEVEL}|$LOG_LEVEL|g" \
-              -e "s|\${API_BASE_URL}|$API_BASE_URL|g" \
-              -e "s|\${CORS_ORIGIN}|$CORS_ORIGIN|g" \
-              -e "s|\${WEBHOOK_URL}|$WEBHOOK_URL|g" \
-              -e "s|\${SECRET_PREFIX}|$SECRET_PREFIX|g" \
-              -e "s|\${IMAGE_PATH}|$IMAGE_PATH|g" \
-              cloud-run-service.template.yaml > cloud-run-service.generated.yaml
-
-          # 檢查生成的 manifest
-          echo "生成 manifest 完成，檢查映像路徑:"
-          grep -A 2 "containers:" cloud-run-service.generated.yaml
-
-      # 上傳產生的 manifest 作為 artifact，供後續部署使用
-      - name: 上傳 manifest 檔案
-        uses: actions/upload-artifact@v4
-        with:
-          name: cloud-run-manifest
-          path: cloud-run-service.generated.yaml
-          retention-days: 1
-
-  # =============================================================
-  # 4) Deploy (depends on manifest & scan)
-  # =============================================================
-  deploy:
-    name: 🚀 Deploy to Cloud Run
-    runs-on: ubuntu-latest
-    needs:
-      - generate_manifest
-      - scan_image
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-
-      # 下載之前上傳的 manifest 檔案
-      - name: 下載 manifest 檔案
-        uses: actions/download-artifact@v4
-        with:
-          name: cloud-run-manifest
-          path: .
-
-      # 確認下載的檔案存在且可讀
-      - name: 檢查 manifest 檔案
-        run: |
-          if [ ! -f "cloud-run-service.generated.yaml" ]; then
-            echo "❌ 錯誤: Manifest 檔案不存在"
-            ls -la
-            exit 1
+          # 添加執行階段需要的變數
+          if [ "${{ env._ENV }}" = "production" ]; then
+            echo "_MAX_INSTANCES=2" >> $GITHUB_ENV
+          else
+            echo "_MAX_INSTANCES=1" >> $GITHUB_ENV
           fi
 
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          # 等待變數設置生效
+          sleep 1
 
-      - uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ env.PROJECT_ID }}
+          # 根據環境設置後綴（直接使用 Bash 變數，避免使用 ${} 格式）
+          if [ "$_ENV" = "production" ]; then
+            suffix=""
+          else
+            suffix="-dev"
+          fi
 
-      - name: Cloud Run Deploy
-        id: deploy
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          metadata: cloud-run-service.generated.yaml
-          region: ${{ env.REGION }}
-          project_id: ${{ env.PROJECT_ID }}
+          # 手動構建完整映像路徑（使用純 Bash 變數，避免使用 ${} 格式）
+          FULL_IMAGE_PATH="$REGION-docker.pkg.dev/${{ env.PROJECT_ID }}/one-key-balance-kit/api$suffix"
 
-      - name: 🌐 Show URL
+          # 調用 Cloud Build（使用純 Bash 變數）
+          # 確保使用引號包裹整個 substitutions 字符串
+          gcloud builds submit \
+            --project=${{ env.PROJECT_ID }} \
+            --config=cloudbuild.yaml \
+            --substitutions="_IMAGE_PATH=$FULL_IMAGE_PATH,_ENV=$_ENV,_MAX_INSTANCES=$_MAX_INSTANCES,_REGION=$REGION,_GIT_SHA=${{ github.sha }}"
+
+      # --- 顯示部署 URL -----------------------------------------------------
+      - name: 🌐 Show Service URL
+        if: ${{ success() && !cancelled() }}
+        shell: bash
         run: |
-          echo "✅ ${{ needs.build_push.outputs.environment }} URL: ${{ steps.deploy.outputs.url }}"
+          ENV_SUFFIX=$([ "${{ env._ENV }}" = "production" ] && echo "" || echo "-dev")
+          SERVICE_NAME="one-key-balance-kit$ENV_SUFFIX"
+
+          URL=$(gcloud run services describe $SERVICE_NAME \
+                --region=${{ env.REGION }} \
+                --project=${{ env.PROJECT_ID }} \
+                --format="value(status.url)")
+
+          echo "✅ ${{ env._ENV }} 環境部署完成"
+          echo "🔗 服務 URL: $URL"

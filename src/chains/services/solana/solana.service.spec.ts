@@ -196,74 +196,24 @@ describe('SolanaService', () => {
       expect(mockProviderFactory.getProvider).toHaveBeenCalledWith(ChainName.SOLANA, providerType);
     });
 
-    it('如果地址無效應該返回零餘額的響應', async () => {
+    it('如果地址無效應該拋出錯誤', async () => {
       const invalidAddress = 'invalid-address';
-      const result = await service.getBalances(invalidAddress);
-
-      expect(result).toEqual({
-        cluster: SolanaCluster.MAINNET,
-        nativeBalance: {
-          symbol: SOL_SYMBOL,
-          decimals: SOL_DECIMALS,
-          balance: '0',
-          usd: 0,
-        },
-        tokens: [],
-        nfts: [],
-        updatedAt: expect.any(Number),
-      });
+      await expect(service.getBalances(invalidAddress)).rejects.toThrow('Invalid Solana address');
     });
 
-    it('如果提供者不支持應該使用默認實現', async () => {
+    it('如果提供者不支持應該拋出錯誤', async () => {
       mockSolanaProvider.isSupported.mockReturnValueOnce(false);
 
-      const result = await service.getBalances(address);
-
-      expect(result).toEqual({
-        cluster: SolanaCluster.MAINNET,
-        nativeBalance: {
-          symbol: SOL_SYMBOL,
-          decimals: SOL_DECIMALS,
-          balance: '1000000000',
-          usd: 100,
-        },
-        tokens: [
-          {
-            mint: 'TokenMintAddress1',
-            balance: '100000000',
-            tokenMetadata: {
-              symbol: 'TOKEN',
-              decimals: 9,
-              name: 'Example Token',
-            },
-          },
-        ],
-        nfts: [
-          {
-            mint: 'NftMintAddress1',
-            tokenId: '1',
-            tokenMetadata: {
-              name: 'Example NFT',
-              image: 'https://example.com/nft.png',
-              collection: {
-                name: 'Example Collection',
-              },
-            },
-          },
-        ],
-        updatedAt: expect.any(Number),
-      });
+      await expect(service.getBalances(address)).rejects.toThrow('Provider alchemy is not working');
     });
 
-    it('如果提供者拋出錯誤應該使用默認實現', async () => {
+    it('如果提供者拋出錯誤應該拋出錯誤', async () => {
       mockSolanaProvider.getBalances.mockRejectedValueOnce(new Error('Provider error'));
 
-      const result = await service.getBalances(address);
-
-      expect(result.nativeBalance.balance).toBe('1000000000'); // 默認實現
+      await expect(service.getBalances(address)).rejects.toThrow('Provider alchemy is not working');
     });
 
-    it('如果提供者返回失敗狀態應該使用默認實現', async () => {
+    it('如果提供者返回失敗狀態應該拋出錯誤', async () => {
       mockSolanaProvider.getBalances.mockResolvedValueOnce({
         isSuccess: false,
         errorMessage: 'Provider error',
@@ -272,9 +222,7 @@ describe('SolanaService', () => {
         nfts: [],
       });
 
-      const result = await service.getBalances(address);
-
-      expect(result.nativeBalance.balance).toBe('1000000000'); // 默認實現
+      await expect(service.getBalances(address)).rejects.toThrow('Provider alchemy is not working');
     });
   });
 });

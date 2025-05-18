@@ -38,8 +38,37 @@ interface CustomCacheOptions {
         // 使用結構化的 Redis 配置
         const redisConfig = configService.redis;
 
+        // 優先檢查是否提供了完整的 Redis URL
+        if (redisConfig && redisConfig.url) {
+          try {
+            logger.log(`Configuring Redis cache using provided URL`);
+
+            // 使用提供的 Redis URL
+            const redisUrl = redisConfig.url;
+
+            // 使用 createKeyv 創建 Redis Keyv 客戶端
+            const redisKeyv = createKeyv(redisUrl, {
+              useUnlink: true, // 使用 UNLINK 代替 DEL，性能更好
+              clearBatchSize: 1000, // 批量刪除時的批次大小
+            });
+
+            // 返回包含 Redis 設定的配置
+            return {
+              ttl: 30 * 60, // 秒
+              stores: [
+                // 使用配置好的 redisKeyv 客戶端
+                redisKeyv,
+              ],
+              // 自定義屬性，用於在 Service 中檢測是否使用 Redis
+              isRedisStore: true,
+            };
+          } catch (error) {
+            logger.error(`Failed to initialize Redis cache with URL: ${error.message}`);
+            logger.warn('Falling back to memory cache');
+          }
+        }
         // 檢查 Redis 配置是否存在且 host 不為空
-        if (redisConfig && redisConfig.host) {
+        else if (redisConfig && redisConfig.host) {
           try {
             logger.log(`Configuring Redis cache: ${redisConfig.host}:${redisConfig.port}`);
 
