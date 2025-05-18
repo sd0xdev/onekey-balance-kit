@@ -303,13 +303,30 @@ export class WebhookManagementService {
   /**
    * 通過 webhook URL 和地址獲取對應的 signing_key
    * @param webhookUrl webhook URL
-   * @param address 合約或錢包地址（可選）
    * @param chain 區塊鏈名稱（可選）
    * @param forceRefresh 是否強制刷新快取
    * @returns signing_key 或 null (如果找不到對應的 webhook)
    */
-  public async getSigningKeyByUrl(webhookUrl: string, chain: ChainName): Promise<string | null> {
+  public async getSigningKeyByUrl(
+    webhookUrl: string,
+    chain: ChainName,
+    forceRefresh = false,
+  ): Promise<string | null> {
     try {
+      // 生成緩存鍵，由 URL 和鏈組成
+      const cacheKey = `${webhookUrl}:${chain}`;
+
+      // 檢查緩存是否存在且有效，如果不是強制刷新的話
+      if (!forceRefresh) {
+        const cachedData = this.signingKeyCache.get(cacheKey);
+        const now = Date.now();
+
+        if (cachedData && cachedData.expiresAt > now) {
+          this.logger.debug(`使用緩存的 signing_key, webhookUrl: ${webhookUrl}, chain: ${chain}`);
+          return cachedData.key;
+        }
+      }
+
       // 從 API 獲取最新的 webhook 列表
       const webhooks = await this.getExistingWebhooks();
       if (!webhooks || webhooks.length === 0) {
@@ -328,7 +345,15 @@ export class WebhookManagementService {
         return null;
       }
 
-      return webhook.signing_key;
+      // 緩存找到的 signing_key
+      const signingKey = webhook.signing_key;
+      if (signingKey) {
+        const expiresAt = Date.now() + this.cacheTTL;
+        this.signingKeyCache.set(cacheKey, { key: signingKey, expiresAt });
+        this.logger.debug(`已更新 signing_key 緩存，webhookUrl: ${webhookUrl}, chain: ${chain}`);
+      }
+
+      return signingKey;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(

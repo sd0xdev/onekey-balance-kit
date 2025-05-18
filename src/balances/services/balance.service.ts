@@ -17,6 +17,7 @@ import { Request } from 'express';
 import { CHAIN_INFO_MAP } from '../../chains/constants';
 import { NotificationService } from '../../notification/notification.service';
 import { BalanceResponse as LegacyBalanceResponse } from '../../chains/interfaces/chain-service.interface';
+import { FungibleToken } from '../../core/db/schemas/portfolio-snapshot.schema';
 
 // 擴展Express的Request介面
 interface RequestWithBlockchainProvider extends Request {
@@ -188,7 +189,7 @@ export class BalanceService {
           decimals: 18,
           balance: '0',
         },
-        tokens: balanceData.tokens || [],
+        tokens: this.getTokensFromBalanceData(balanceData),
         nfts: balanceData.nfts || [],
         updatedAt: balanceData.updatedAt || Math.floor(Date.now() / 1000),
       };
@@ -225,5 +226,40 @@ export class BalanceService {
     }
 
     return this.cacheMongoService.invalidateAddressCache(chain, chainId, address);
+  }
+
+  /**
+   * 從餘額數據中安全地獲取代幣列表
+   * 優先使用 fungibles，其次使用 tokens
+   */
+  private getTokensFromBalanceData(
+    balanceData: Record<string, any>,
+  ): Array<FungibleToken | Record<string, any>> {
+    // 定義鏈上代幣資訊的型別，確保回傳型別一致
+    type TokenInfo = {
+      address?: string;
+      mint?: string;
+      symbol?: string;
+      name?: string;
+      balance: string;
+      decimals?: number;
+      usd?: number;
+      logo?: string;
+      tokenMetadata?: {
+        symbol?: string;
+        name?: string;
+        decimals?: number;
+      };
+    };
+
+    if ('fungibles' in balanceData && Array.isArray(balanceData.fungibles)) {
+      return balanceData.fungibles as FungibleToken[];
+    }
+
+    if ('tokens' in balanceData && Array.isArray(balanceData.tokens)) {
+      return balanceData.tokens as TokenInfo[];
+    }
+
+    return [];
   }
 }
