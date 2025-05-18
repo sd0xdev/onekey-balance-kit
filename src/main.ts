@@ -51,17 +51,54 @@ async function bootstrap() {
 
   // 配置 CORS
   if (process.env.NODE_ENV === 'production') {
-    // 生產環境使用環境變數中的指定來源
-    const allowedOrigin = process.env.CORS_ORIGIN;
+    // 生產環境配置 CORS
+    const allowedOrigins = ['https://onekeybalance.sd0.tech', 'https://www.onekeybalance.sd0.tech'];
+    if (process.env.CORS_ORIGIN) {
+      allowedOrigins.push(process.env.CORS_ORIGIN);
+    }
+
     app.enableCors({
-      origin: allowedOrigin,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      origin: (origin, callback) => {
+        // 允許特定來源或是請求沒有來源（如某些 SSE 請求）
+        if (!origin || allowedOrigins.some((allowedOrigin) => origin.startsWith(allowedOrigin))) {
+          callback(null, true);
+        } else {
+          console.warn(`CORS 請求被拒絕: ${origin} 不在允許的列表中`, allowedOrigins);
+          callback(null, false);
+        }
+      },
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
       credentials: true,
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'Accept',
+        'Cache-Control',
+        'Last-Event-ID',
+        'X-Requested-With',
+      ],
+      exposedHeaders: ['Content-Disposition', 'Content-Length', 'Content-Type'],
+      preflightContinue: false,
+      optionsSuccessStatus: 204,
+      maxAge: 3600, // 預檢請求結果緩存1小時
     });
-    console.log(`CORS 已設置為僅允許來源: ${allowedOrigin}`);
+    console.log(`CORS 已設置為允許來源: ${allowedOrigins.join(', ')}`);
   } else {
     // 開發環境允許所有來源
-    app.enableCors();
+    app.enableCors({
+      origin: '*',
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
+      credentials: false,
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'Accept',
+        'Cache-Control',
+        'Last-Event-ID',
+        'X-Requested-With',
+      ],
+      exposedHeaders: ['Content-Disposition', 'Content-Length', 'Content-Type'],
+    });
     console.log('CORS 已設置為允許所有來源 (開發環境)');
   }
 
