@@ -51,6 +51,7 @@ jobs:
       log_level: ${{ steps.vars.outputs.LOG_LEVEL }}
       api_base_url: ${{ steps.vars.outputs.API_BASE_URL }}
       cors_origin: ${{ steps.vars.outputs.CORS_ORIGIN }}
+      webhook_url: ${{ steps.vars.outputs.WEBHOOK_URL }}
       deploy_tag: ${{ steps.vars.outputs.DEPLOY_TAG }}
       environment: ${{ steps.vars.outputs.ENVIRONMENT }}
     steps:
@@ -70,8 +71,9 @@ jobs:
             NODE_ENV="production"
             MAX_INSTANCES=2
             LOG_LEVEL=""
-            API_BASE_URL="${{ vars.PROD_API_BASE_URL || 'https://api.example.com' }}"
-            CORS_ORIGIN="${{ vars.PROD_CORS_ORIGIN || 'https://app.example.com' }}"
+            API_BASE_URL="${{ vars.PROD_API_BASE_URL || 'https://api-onekeybalance.sd0.tech' }}"
+            CORS_ORIGIN="${{ vars.PROD_CORS_ORIGIN || 'https://onekeybalance.sd0.tech' }}"
+            WEBHOOK_URL="${{ vars.PROD_WEBHOOK_URL || 'https://api-onekeybalance.sd0.tech/v1/api/webhook' }}"
             SECRET_PREFIX="production"
             SERVICE_NAME="one-key-balance-kit"
             CACHE_TTL=3600
@@ -82,8 +84,9 @@ jobs:
             NODE_ENV="development"
             MAX_INSTANCES=1
             LOG_LEVEL="debug"
-            API_BASE_URL="${{ vars.DEV_API_BASE_URL || 'https://api-dev.example.com' }}"
+            API_BASE_URL="${{ vars.DEV_API_BASE_URL || 'https://staging-api-onekeybalance.sd0.tech' }}"
             CORS_ORIGIN="${{ vars.DEV_CORS_ORIGIN || '*' }}"
+            WEBHOOK_URL="${{ vars.DEV_WEBHOOK_URL || 'https://staging-api-onekeybalance.sd0.tech/v1/api/webhook' }}"
             SECRET_PREFIX="staging"
             SERVICE_NAME="one-key-balance-kit-dev"
             CACHE_TTL=1800
@@ -105,6 +108,7 @@ jobs:
           echo "LOG_LEVEL=$LOG_LEVEL"               >> $GITHUB_OUTPUT
           echo "API_BASE_URL=$API_BASE_URL"         >> $GITHUB_OUTPUT
           echo "CORS_ORIGIN=$CORS_ORIGIN"           >> $GITHUB_OUTPUT
+          echo "WEBHOOK_URL=$WEBHOOK_URL"           >> $GITHUB_OUTPUT
           echo "SECRET_PREFIX=$SECRET_PREFIX"       >> $GITHUB_OUTPUT
           echo "MAX_INSTANCES=$MAX_INSTANCES"       >> $GITHUB_OUTPUT
           echo "IMAGE_TAG=$IMAGE_TAG"               >> $GITHUB_OUTPUT
@@ -230,6 +234,7 @@ jobs:
           LOG_LEVEL='${{ needs.build_push.outputs.log_level }}'
           API_BASE_URL='${{ needs.build_push.outputs.api_base_url }}'
           CORS_ORIGIN='${{ needs.build_push.outputs.cors_origin }}'
+          WEBHOOK_URL='${{ needs.build_push.outputs.webhook_url }}'
           SECRET_PREFIX='${{ needs.build_push.outputs.secret_prefix }}'
           if [[ "$CORS_ORIGIN" == "*" ]]; then CORS_ORIGIN='"*"'; fi
 
@@ -254,6 +259,7 @@ jobs:
               -e "s|\${LOG_LEVEL}|$LOG_LEVEL|g" \
               -e "s|\${API_BASE_URL}|$API_BASE_URL|g" \
               -e "s|\${CORS_ORIGIN}|$CORS_ORIGIN|g" \
+              -e "s|\${WEBHOOK_URL}|$WEBHOOK_URL|g" \
               -e "s|\${SECRET_PREFIX}|$SECRET_PREFIX|g" \
               -e "s|\${IMAGE_PATH}|$IMAGE_PATH|g" \
               cloud-run-service.template.yaml > cloud-run-service.generated.yaml
