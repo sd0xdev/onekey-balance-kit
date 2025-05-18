@@ -1,0 +1,99 @@
+# cloudbuild.yaml ── Build → Deploy
+substitutions:
+  _IMAGE_PATH: '${_REGION}-docker.pkg.dev/$PROJECT_ID/one-key-balance-kit/api'
+  _ENV: 'staging' # GitHub Action 會覆寫
+  _MAX_INSTANCES: '1'
+  _REGION: 'asia-east1' # 預設值，GitHub Action 會覆寫
+timeout: '1200s'
+options:
+  machineType: 'E2_HIGHCPU_8' # 免費額度同享
+steps:
+  # --- 1) Build multi-arch image ------------------------------------------
+  - id: build-image
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        docker run --privileged --rm tonistiigi/binfmt --install all
+        docker buildx create --use
+
+        # 確保 SHORT_SHA 有值，防止空標籤 (在 Bash 中處理)
+        BUILD_SHA="${SHORT_SHA:-latest}"
+
+        # 使用條件語句決定後綴 (避免 Cloud Build 解析變數)
+        if [ "${_ENV}" = "production" ]; then
+          suffix=""
+        else
+          suffix="-dev"
+        fi
+
+        # 組合映像路徑 (注意使用雙引號避免被 Cloud Build 解析)
+        img_path="${_REGION}-docker.pkg.dev/$PROJECT_ID/one-key-balance-kit/api"
+        tag_base="$img_path$suffix"
+
+        echo "構建映像: $tag_base:$BUILD_SHA"
+
+        docker buildx build \
+          --platform linux/amd64,linux/arm64 \
+          -t "$tag_base:$BUILD_SHA" \
+          -t "$tag_base:${_ENV}" \
+          -t "$tag_base:latest" \
+          --build-arg NODE_ENV=$([ "${_ENV}" = "production" ] && echo production || echo development) \
+          --push .
+
+  # --- 2) 產生 manifest & 部署 -------------------------------------------
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        # 確保 SHORT_SHA 有值 (在 Bash 中處理)
+        BUILD_SHA="${SHORT_SHA:-latest}"
+
+        # 使用條件語句決定後綴 (避免 Cloud Build 解析變數)
+        if [ "${_ENV}" = "production" ]; then
+          suffix=""
+        else
+          suffix="-dev"
+        fi
+
+        # 避免使用可能被 Cloud Build 誤解的變數名稱
+        export ENV_SUFFIX=$([ "${_ENV}" = "production" ] && echo "" || echo "-dev")
+        export ENVIRONMENT="${_ENV}"
+        export MAX_INSTANCES="${_MAX_INSTANCES}"
+        export REGION="${_REGION}"
+        export PROJECT_ID="$PROJECT_ID"
+        # 注意: 避免使用 APP_SUFFIX 變數名稱，使用 suffix 代替
+        export IMAGE_TAG="$BUILD_SHA"
+        export NODE_ENV=$([ "${_ENV}" = "production" ] && echo "production" || echo "development")
+        export LOG_LEVEL=$([ "${_ENV}" = "production" ] && echo "" || echo "debug")
+        export API_BASE_URL=$([ "${_ENV}" = "production" ] && echo "https://api-onekeybalance.sd0.tech" || echo "https://staging-api-onekeybalance.sd0.tech")
+        export CORS_ORIGIN=$([ "${_ENV}" = "production" ] && echo "https://onekeybalance.sd0.tech" || echo '"*"')
+        export WEBHOOK_URL=$([ "${_ENV}" = "production" ] && echo "https://api-onekeybalance.sd0.tech/v1/api/webhook" || echo "https://staging-api-onekeybalance.sd0.tech/v1/api/webhook")
+        export SECRET_PREFIX=$([ "${_ENV}" = "production" ] && echo "production" || echo "staging")
+
+        # 構建映像路徑
+        img_path="${_REGION}-docker.pkg.dev/$PROJECT_ID/one-key-balance-kit/api"
+        tag_base="$img_path$suffix"
+        export IMAGE_PATH="$tag_base"
+
+        # 顯示將用於部署的映像
+        echo "部署使用的映像: $IMAGE_PATH:$BUILD_SHA"
+
+        cat cloud-run-service.template.yaml | envsubst > cloud-run-service.generated.yaml
+
+        # 檢查生成的 manifest
+        echo "生成 manifest 完成，檢查映像路徑:"
+        grep -A 2 "containers:" cloud-run-service.generated.yaml
+
+        # 部署至 Cloud Run
+        gcloud run services replace cloud-run-service.generated.yaml \
+          --region=${_REGION} --project=$PROJECT_ID
+
+# Cloud Build 圖像定義 - 不在此處使用 Bash 預設值
+images:
+  - '${_IMAGE_PATH}:${SHORT_SHA}'
+  - '${_IMAGE_PATH}:${_ENV}'
+  - '${_IMAGE_PATH}:latest'

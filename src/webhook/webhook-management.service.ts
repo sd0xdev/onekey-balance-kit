@@ -4,9 +4,9 @@ import { Alchemy, Network, WebhookType } from 'alchemy-sdk';
 import { lastValueFrom } from 'rxjs';
 import { ChainName } from '../chains/constants';
 import { AppConfigService } from '../config/config.service';
-import { ConfigKey } from '../config/constants';
 import { AlchemyNetworkUtils } from './utils/alchemy-network.utils';
 import { DEFAULT_MONITORED_ADDRESS } from './constants/webhook.constants';
+import { CacheService } from '../core/cache/cache.service';
 
 /**
  * Alchemy webhook 回應介面
@@ -40,7 +40,6 @@ interface SigningKeyCache {
 @Injectable()
 export class WebhookManagementService {
   private readonly logger = new Logger(WebhookManagementService.name);
-  private readonly webhookIdMap: Map<string, string> = new Map(); // 使用 network 作為 key，儲存 webhook ID
   private readonly alchemyApiUrl = 'https://dashboard.alchemy.com/api';
   private readonly alchemyToken: string;
   private readonly alchemyApiKey: string;
@@ -57,6 +56,7 @@ export class WebhookManagementService {
   constructor(
     private readonly configService: AppConfigService,
     private readonly httpService: HttpService,
+    private readonly cacheService: CacheService,
   ) {
     // 從 blockchain 配置獲取 alchemyToken
     this.alchemyToken = this.configService.blockchain?.alchemyToken || '';
@@ -211,22 +211,33 @@ export class WebhookManagementService {
    */
   private async getWebhookIdForChain(chain: ChainName): Promise<string | null> {
     try {
-      // 檢查緩存中是否已存在
-      const cachedId = this.webhookIdMap.get(chain);
-      if (cachedId) {
-        return cachedId;
-      }
+      this.logger.debug(
+        `緩存中未找到 ${chain} 的 webhook ID，嘗試從 Alchemy API 獲取現有 webhooks`,
+      );
 
       // 獲取當前所有 webhook
       const webhooks = await this.getExistingWebhooks();
-      if (!webhooks || webhooks.length === 0) {
-        // 如果沒有找到 webhooks，創建一個新的
-        const networkId = this.getNetworkIdForChain(chain);
-        return await this.createNewWebhook(chain, networkId);
+      if (!webhooks) {
+        this.logger.warn(`無法獲取現有 webhooks 列表，將嘗試創建新的 webhook`);
+        return await this.createNewWebhook(chain);
       }
+
+      if (webhooks.length === 0) {
+        this.logger.log(`未發現現有 webhooks，將為 ${chain} 創建新的 webhook`);
+        return await this.createNewWebhook(chain);
+      }
+
+      this.logger.debug(`獲取到 ${webhooks.length} 個現有 webhooks，尋找匹配 ${chain} 的 webhook`);
 
       // 地址活動 webhook 的網絡名稱
       const networkId = this.getNetworkIdForChain(chain);
+
+      // 記錄所有 webhook 用於診斷
+      for (const webhook of webhooks) {
+        this.logger.debug(
+          `找到 webhook: ID=${webhook.id}, URL=${webhook.webhook_url}, 網絡=${webhook.network}, 類型=${webhook.webhook_type}, 活躍=${webhook.is_active}`,
+        );
+      }
 
       // 尋找匹配的 webhook
       for (const webhook of webhooks) {
@@ -236,14 +247,20 @@ export class WebhookManagementService {
           webhook.is_active &&
           webhook.webhook_url === this.webhookUrl // 確保 webhook URL 匹配當前環境
         ) {
+          this.logger.log(
+            `找到匹配的 webhook: ${webhook.id} 用於鏈 ${chain} (網絡ID: ${networkId})`,
+          );
           // 儲存到緩存
-          this.webhookIdMap.set(chain, webhook.id);
           return webhook.id;
         }
       }
 
+      this.logger.log(
+        `未找到匹配的 webhook (鏈=${chain}, 網絡ID=${networkId}, URL=${this.webhookUrl})，將創建新的`,
+      );
+
       // 如果沒有找到匹配的 webhook，創建一個新的
-      return await this.createNewWebhook(chain, networkId);
+      return await this.createNewWebhook(chain);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(
@@ -395,49 +412,164 @@ export class WebhookManagementService {
    * @param networkId 網絡 ID
    * @returns 新創建的 webhook ID
    */
-  private async createNewWebhook(chain: ChainName, networkId: string): Promise<string | null> {
+  private async createNewWebhook(chain: ChainName): Promise<string | null> {
+    // 使用簡單鎖防止同時創建
+    const lockKey = `webhook:create:${chain}`;
+
     try {
-      if (!this.alchemyApiKey) {
+      // 先檢查鎖是否存在
+      const existingLock = await this.cacheService.get<string>(lockKey);
+      if (existingLock) {
+        this.logger.warn(`另一個進程正在創建 ${chain} webhook，跳過此次操作`);
         return null;
       }
 
-      // 使用已保存的 webhookUrl
-      if (!this.webhookUrl) {
-        this.logger.error('Webhook URL is not configured in the application');
-        return null;
+      // 設置鎖，有效期為 30 秒
+      await this.cacheService.set(lockKey, Date.now().toString(), 30);
+
+      try {
+        this.logger.log(`嘗試為 ${chain} 創建新的 webhook...`);
+
+        if (!this.alchemyApiKey) {
+          this.logger.error('創建 webhook 失敗: Alchemy API key 未配置');
+          return null;
+        }
+
+        // 使用已保存的 webhookUrl
+        if (!this.webhookUrl) {
+          this.logger.error('創建 webhook 失敗: webhook URL 未配置');
+          return null;
+        }
+
+        const client = this.alchemySDKClients.get(chain);
+        if (!client) {
+          this.logger.error(`創建 webhook 失敗: 找不到 ${chain} 的 Alchemy SDK 客戶端`);
+          return null;
+        }
+
+        // 獲取網絡 ID 並打印日誌
+        const networkId = this.getNetworkIdForChain(chain);
+        this.logger.log(
+          `準備為 ${chain} (網絡 ID: ${networkId}) 創建 webhook，URL: ${this.webhookUrl}`,
+        );
+
+        // 檢查參數是否完整
+        this.logger.debug(`創建 webhook 參數檢查:
+          - API Key: ${this.alchemyApiKey ? '已設置' : '未設置'}
+          - Webhook URL: ${this.webhookUrl}
+          - Network: ${Network[chain] ? Network[chain] : '未識別'}
+          - 默認監控地址: ${DEFAULT_MONITORED_ADDRESS}`);
+
+        // 再次檢查是否已經有此鏈的webhook (防止在加鎖期間其他進程已創建)
+        const existingId = await this.getExistingWebhookIdForChain(chain);
+        if (existingId) {
+          this.logger.log(`在創建前發現 ${chain} 已有 webhook ID: ${existingId}，將使用現有的`);
+          return existingId;
+        }
+
+        try {
+          this.logger.debug(`正在調用 Alchemy API 創建 webhook...`);
+
+          // 打印請求內容以便診斷
+          const requestParams = {
+            url: this.webhookUrl,
+            type: WebhookType.ADDRESS_ACTIVITY,
+            options: {
+              addresses: [DEFAULT_MONITORED_ADDRESS],
+              network: Network[chain],
+            },
+          };
+          this.logger.debug(`Alchemy 請求參數: ${JSON.stringify(requestParams)}`);
+
+          const result = await client.notify.createWebhook(
+            this.webhookUrl,
+            WebhookType.ADDRESS_ACTIVITY,
+            {
+              addresses: [DEFAULT_MONITORED_ADDRESS], // 使用預設監控地址
+              network: Network[chain],
+            },
+          );
+
+          if (result && result.id) {
+            const newWebhookId = result.id;
+            this.logger.log(`成功為 ${chain} 創建了新的 webhook，ID: ${newWebhookId}`);
+            return newWebhookId;
+          } else {
+            this.logger.error(
+              `創建 webhook 失敗: Alchemy API 沒有返回有效的 webhook ID (${JSON.stringify(result)})`,
+            );
+            return null;
+          }
+        } catch (apiError: unknown) {
+          const apiErrorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+          // 檢查是否為常見錯誤類型並提供更具體的處理建議
+          if (apiErrorMessage.includes('rate limit') || apiErrorMessage.includes('429')) {
+            this.logger.error(`調用 Alchemy API 創建 webhook 時被限流: ${apiErrorMessage}`);
+          } else if (apiErrorMessage.includes('auth') || apiErrorMessage.includes('401')) {
+            this.logger.error(`調用 Alchemy API 創建 webhook 時認證失敗: ${apiErrorMessage}`);
+          } else if (apiErrorMessage.includes('timeout') || apiErrorMessage.includes('timed out')) {
+            this.logger.error(`調用 Alchemy API 創建 webhook 時請求超時: ${apiErrorMessage}`);
+          } else {
+            this.logger.error(
+              `調用 Alchemy API 創建 webhook 時出錯: ${apiErrorMessage}`,
+              apiError instanceof Error ? apiError.stack : undefined,
+            );
+          }
+          return null;
+        }
+      } finally {
+        // 無論成功或失敗，都釋放鎖
+        await this.cacheService.delete(lockKey);
+        this.logger.debug(`已釋放 ${chain} webhook 創建鎖`);
       }
-
-      const client = this.alchemySDKClients.get(chain);
-      if (!client) {
-        this.logger.error(`No Alchemy SDK client for chain: ${chain}`);
-        return null;
-      }
-
-      const result = await client.notify.createWebhook(
-        this.webhookUrl,
-        WebhookType.ADDRESS_ACTIVITY,
-        {
-          addresses: [DEFAULT_MONITORED_ADDRESS], // 使用預設監控地址
-          network: Network[chain],
-        },
-      );
-
-      if (result && result.id) {
-        const newWebhookId = result.id;
-        // 儲存到緩存
-        this.webhookIdMap.set(chain, newWebhookId);
-        this.logger.debug(`為 ${chain} 創建了新的 webhook，ID: ${newWebhookId}`);
-        return newWebhookId;
-      }
-
-      this.logger.error(`創建 webhook 失敗: 沒有返回有效的 ID`);
-      return null;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(
         `為 ${chain} 創建 webhook 時發生錯誤: ${errorMessage}`,
         error instanceof Error ? error.stack : undefined,
       );
+
+      // 嘗試釋放鎖
+      try {
+        await this.cacheService.delete(lockKey);
+      } catch (e) {
+        // 忽略釋放鎖時的錯誤
+      }
+
+      return null;
+    }
+  }
+
+  /**
+   * 查找已存在的 webhook ID (不創建新的)
+   * 僅用於 createNewWebhook 方法內部二次確認
+   */
+  private async getExistingWebhookIdForChain(chain: ChainName): Promise<string | null> {
+    try {
+      // 獲取當前所有 webhook
+      const webhooks = await this.getExistingWebhooks();
+      if (!webhooks || webhooks.length === 0) {
+        return null;
+      }
+
+      // 地址活動 webhook 的網絡名稱
+      const networkId = this.getNetworkIdForChain(chain);
+
+      // 尋找匹配的 webhook
+      for (const webhook of webhooks) {
+        if (
+          webhook.network === networkId &&
+          webhook.webhook_type === 'ADDRESS_ACTIVITY' &&
+          webhook.is_active &&
+          webhook.webhook_url === this.webhookUrl
+        ) {
+          return webhook.id;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      this.logger.warn(`檢查現有 webhook 時出錯: ${error}`);
       return null;
     }
   }

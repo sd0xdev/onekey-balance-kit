@@ -89,6 +89,8 @@ export class WebhookController {
     // 使用動態獲取的 signing_key 驗證簽名
     const rawBody = (request as any).rawBody as Buffer;
     if (!validateAlchemySignature(signature, rawBody, signingKey)) {
+      // remove all signing key cache
+      this.webhookManagementService.clearSigningKeyCache();
       throw new UnauthorizedException('Invalid webhook signature');
     }
 

@@ -28,6 +28,7 @@ export interface RedisConfig {
   port: number;
   password: string;
   db: number;
+  url?: string;
 }
 
 export interface Web3Config {

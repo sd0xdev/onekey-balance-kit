@@ -6,6 +6,7 @@ import { of, throwError } from 'rxjs';
 import { ChainName } from '../chains/constants';
 import { AxiosResponse } from 'axios';
 import { Alchemy } from 'alchemy-sdk';
+import { CacheService } from '../core/cache/cache.service';
 
 // 創建 Alchemy 的模擬
 jest.mock('alchemy-sdk', () => {
@@ -38,6 +39,7 @@ describe('WebhookManagementService', () => {
   let service: WebhookManagementService;
   let httpService: HttpService;
   let configService: AppConfigService;
+  let cacheService: CacheService;
 
   const mockConfigService = {
     blockchain: {
@@ -55,6 +57,16 @@ describe('WebhookManagementService', () => {
     post: jest.fn(),
   };
 
+  // 創建 CacheService 的模擬
+  const mockCacheService = {
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue(undefined),
+    delete: jest.fn().mockResolvedValue(undefined),
+    withLock: jest.fn().mockImplementation(async (key, fn) => {
+      return await fn();
+    }),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -67,12 +79,17 @@ describe('WebhookManagementService', () => {
           provide: HttpService,
           useValue: mockHttpService,
         },
+        {
+          provide: CacheService,
+          useValue: mockCacheService,
+        },
       ],
     }).compile();
 
     service = module.get<WebhookManagementService>(WebhookManagementService);
     httpService = module.get<HttpService>(HttpService);
     configService = module.get<AppConfigService>(AppConfigService);
+    cacheService = module.get<CacheService>(CacheService);
   });
 
   afterEach(() => {
@@ -107,10 +124,13 @@ describe('WebhookManagementService', () => {
       const newService = new WebhookManagementService(
         mockConfigService as any,
         mockHttpService as any,
+        mockCacheService as any,
       );
 
       // 確保 getWebhookIdForChain 返回 null 以模擬無法找到 webhook
       jest.spyOn(newService as any, 'getWebhookIdForChain').mockResolvedValue(null);
+      // 模擬 createNewWebhook 也失敗
+      jest.spyOn(newService as any, 'createNewWebhook').mockResolvedValue(null);
 
       const result = await newService.updateWebhookAddresses(
         ChainName.ETHEREUM,
@@ -124,8 +144,10 @@ describe('WebhookManagementService', () => {
       mockConfigService.get = originalGet;
     });
 
-    it('should return false when webhook ID is not found', async () => {
+    it('should return false when webhook ID is not found and cannot create new webhook', async () => {
       jest.spyOn(service as any, 'getWebhookIdForChain').mockResolvedValue(null);
+      // 模擬 createNewWebhook 也失敗
+      jest.spyOn(service as any, 'createNewWebhook').mockResolvedValue(null);
 
       const result = await service.updateWebhookAddresses(ChainName.ETHEREUM, ['0xabc'], ['0xdef']);
 
@@ -188,6 +210,10 @@ describe('WebhookManagementService', () => {
           {
             provide: HttpService,
             useValue: mockHttpService,
+          },
+          {
+            provide: CacheService,
+            useValue: mockCacheService,
           },
         ],
       }).compile();
@@ -307,6 +333,7 @@ describe('WebhookManagementService', () => {
       const testService = new WebhookManagementService(
         mockConfigService as any,
         mockHttpService as any,
+        mockCacheService as any,
       );
 
       // 確保 alchemyToken 存在
@@ -364,6 +391,157 @@ describe('WebhookManagementService', () => {
       const result = await service.getWebhookDetailsWithSdk(ChainName.ETHEREUM, 'webhook-id-123');
 
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('createNewWebhook', () => {
+    it('should create a new webhook successfully', async () => {
+      // 創建一個測試用的 SDK client
+      const mockAlchemyClient = {
+        notify: {
+          createWebhook: jest.fn().mockResolvedValue({ id: 'new-webhook-id' }),
+        },
+      };
+
+      // 模擬緩存服務
+      mockCacheService.get.mockResolvedValue(null); // 沒有現有鎖
+      mockCacheService.set.mockResolvedValue(undefined); // 成功設置鎖
+
+      // 模擬 getExistingWebhookIdForChain 方法返回 null
+      jest.spyOn(service as any, 'getExistingWebhookIdForChain').mockResolvedValue(null);
+
+      // 設置 alchemySDKClients.get 返回測試用的 client
+      jest.spyOn(service['alchemySDKClients'], 'get').mockReturnValue(mockAlchemyClient as any);
+
+      // 確保 webhookUrl 存在
+      Object.defineProperty(service, 'webhookUrl', {
+        get: () => 'https://test.com/webhook',
+        configurable: true,
+      });
+
+      // 確保 alchemyApiKey 存在
+      Object.defineProperty(service, 'alchemyApiKey', {
+        get: () => 'test-api-key',
+        configurable: true,
+      });
+
+      // 執行私有方法
+      const result = await (service as any).createNewWebhook(ChainName.ETHEREUM);
+
+      // 驗證結果
+      expect(result).toBe('new-webhook-id');
+      expect(mockAlchemyClient.notify.createWebhook).toHaveBeenCalled();
+      expect(mockCacheService.get).toHaveBeenCalled();
+      expect(mockCacheService.set).toHaveBeenCalled();
+      expect(mockCacheService.delete).toHaveBeenCalled();
+    });
+
+    it('should return null when Alchemy API key is not configured', async () => {
+      // 覆蓋 alchemyApiKey
+      Object.defineProperty(service, 'alchemyApiKey', { get: () => '' });
+
+      // 執行私有方法
+      const result = await (service as any).createNewWebhook(ChainName.ETHEREUM);
+
+      // 驗證結果
+      expect(result).toBeNull();
+    });
+
+    it('should return null when webhook URL is not configured', async () => {
+      // 覆蓋 webhookUrl
+      Object.defineProperty(service, 'webhookUrl', { get: () => '' });
+
+      // 執行私有方法
+      const result = await (service as any).createNewWebhook(ChainName.ETHEREUM);
+
+      // 驗證結果
+      expect(result).toBeNull();
+    });
+
+    it('should return null when Alchemy SDK client is not found', async () => {
+      // 設置 alchemySDKClients.get 返回 undefined
+      jest.spyOn(service['alchemySDKClients'], 'get').mockReturnValue(undefined);
+
+      // 執行私有方法
+      const result = await (service as any).createNewWebhook(ChainName.ETHEREUM);
+
+      // 驗證結果
+      expect(result).toBeNull();
+    });
+
+    it('should handle API errors and return null', async () => {
+      // 建立一個測試用的 SDK client，模擬 API 錯誤
+      const mockAlchemyClient = {
+        notify: {
+          createWebhook: jest.fn().mockRejectedValue(new Error('API error')),
+        },
+      };
+
+      // 設置 alchemySDKClients.get 返回測試用的 client
+      jest.spyOn(service['alchemySDKClients'], 'get').mockReturnValue(mockAlchemyClient as any);
+
+      // 模擬 getExistingWebhookIdForChain 方法返回 null
+      jest.spyOn(service as any, 'getExistingWebhookIdForChain').mockResolvedValue(null);
+
+      // 執行私有方法
+      const result = await (service as any).createNewWebhook(ChainName.ETHEREUM);
+
+      // 驗證結果
+      expect(result).toBeNull();
+    });
+
+    it('should return existing webhook ID when found during creation', async () => {
+      // 模擬鎖服務
+      mockCacheService.get.mockResolvedValue(null); // 確保鎖檢查通過
+      mockCacheService.set.mockResolvedValue(undefined); // 成功設置鎖
+      mockCacheService.delete.mockResolvedValue(undefined); // 成功刪除鎖
+
+      // 確保 alchemySDKClients.get 返回有效值
+      const mockAlchemyClient = {
+        notify: {
+          createWebhook: jest.fn().mockResolvedValue({ id: 'mock-id' }),
+        },
+      };
+      jest.spyOn(service['alchemySDKClients'], 'get').mockReturnValue(mockAlchemyClient as any);
+
+      // 模擬 getExistingWebhookIdForChain 方法返回現有的 ID
+      jest
+        .spyOn(service as any, 'getExistingWebhookIdForChain')
+        .mockResolvedValue('existing-webhook-id');
+
+      // 確保 webhookUrl 存在
+      Object.defineProperty(service, 'webhookUrl', {
+        get: () => 'https://test.com/webhook',
+        configurable: true,
+      });
+
+      // 確保 alchemyApiKey 存在
+      Object.defineProperty(service, 'alchemyApiKey', {
+        get: () => 'test-api-key',
+        configurable: true,
+      });
+
+      // 執行私有方法
+      const result = await (service as any).createNewWebhook(ChainName.ETHEREUM);
+
+      // 驗證結果
+      expect(result).toBe('existing-webhook-id');
+      expect(mockCacheService.get).toHaveBeenCalled();
+      expect(mockCacheService.set).toHaveBeenCalled();
+      expect(mockCacheService.delete).toHaveBeenCalled();
+    });
+
+    it('should return null when lock already exists', async () => {
+      // 模擬鎖已存在
+      mockCacheService.get.mockResolvedValue('locked');
+
+      // 執行私有方法
+      const result = await (service as any).createNewWebhook(ChainName.ETHEREUM);
+
+      // 驗證結果
+      expect(result).toBeNull();
+      expect(mockCacheService.get).toHaveBeenCalled();
+      expect(mockCacheService.set).not.toHaveBeenCalled();
     });
   });
 });
