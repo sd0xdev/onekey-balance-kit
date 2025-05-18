@@ -22,6 +22,16 @@ class MockEvmChainService extends AbstractEvmChainService {
     return ChainName.ETHEREUM;
   }
 
+  // 實現 validateAddress 方法
+  validateAddress(address: string): boolean {
+    return this.isValidAddress(address);
+  }
+
+  // 實現 getBalances 方法
+  getBalances(address: string, chainId?: number, providerType?: string): Promise<any> {
+    return Promise.resolve([]);
+  }
+
   // 其他必要的實現已在 AbstractEvmChainService 中
   setChainId = jest.fn();
   getBalance = jest.fn();
@@ -35,6 +45,8 @@ class MockNonEvmChainService implements ChainService {
   getTransactionDetails = jest.fn().mockResolvedValue({});
   getChainName = jest.fn().mockReturnValue('Solana');
   getChainSymbol = jest.fn().mockReturnValue('SOL');
+  validateAddress = jest.fn().mockReturnValue(true);
+  getBalances = jest.fn().mockResolvedValue([]);
 }
 
 describe('ChainRouter', () => {

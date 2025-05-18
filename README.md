@@ -274,6 +274,9 @@ A: 參考[區塊鏈提供者](.cursor/rules/blockchain-providers.mdc)文檔，�
 - [x] ETH Mainnet MVP
 - [x] 多鏈抽象（EVM／L2／BTC／Solana／Discovery）
   - [x] 服務註冊 / 發現 / 路由
+  - [x] Price Provider
+    - [x] Mock Price Provider
+    - [ ] OKX Price Provider
   - [x] EVM 鏈抽象
     - [x] Base
     - [x] Optimism

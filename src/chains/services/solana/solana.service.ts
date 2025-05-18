@@ -279,4 +279,9 @@ export class SolanaService extends AbstractChainService implements BalanceQuerya
       };
     }
   }
+
+  // 添加 validateAddress 方法
+  validateAddress(address: string): boolean {
+    return this.isValidAddress(address);
+  }
 }

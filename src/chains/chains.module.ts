@@ -15,6 +15,7 @@ import { ChainsController } from './controllers/chains.controller';
 import { ChainIdController } from './controllers/chain-id.controller';
 import { ChainRouter } from './services/core/chain-router.service';
 import { ProvidersModule } from '../providers/providers.module';
+import { PriceModule } from '../prices/price.module';
 
 /**
  * 區塊鏈模組
@@ -28,6 +29,7 @@ import { ProvidersModule } from '../providers/providers.module';
     }),
     DiscoveryModule,
     ProvidersModule, // 提供鏈服務所需的提供者
+    PriceModule, // 提供代幣價格服務
   ],
   controllers: [
     ChainsController, // 傳統鏈名稱API控制器
@@ -92,6 +94,7 @@ export class ChainsModule {
         }),
         DiscoveryModule,
         ProvidersModule,
+        PriceModule, // 提供代幣價格服務
       ],
       controllers: [
         ChainsController,

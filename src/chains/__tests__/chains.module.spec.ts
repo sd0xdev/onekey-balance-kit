@@ -67,7 +67,7 @@ describe('ChainsModule', () => {
 
       // 驗證動態模組結構
       expect(dynamicModule.module).toBe(ChainsModule);
-      expect(dynamicModule.imports).toHaveLength(3);
+      expect(dynamicModule.imports).toHaveLength(4);
       expect(dynamicModule.controllers).toHaveLength(2);
       expect(dynamicModule.providers).toHaveLength(13);
       expect(dynamicModule.exports).toHaveLength(7);

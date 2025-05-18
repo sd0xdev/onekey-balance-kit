@@ -35,4 +35,9 @@ export class PolygonService extends AbstractEvmChainService {
   protected getDefaultChainId(): number {
     return 137; // Polygon主網
   }
+
+  // 添加 validateAddress 方法
+  validateAddress(address: string): boolean {
+    return this.isValidAddress(address);
+  }
 }
