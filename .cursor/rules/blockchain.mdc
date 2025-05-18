@@ -21,6 +21,7 @@ alwaysApply: false
 8. **攔截器機制**：使用 [BlockchainProviderInterceptor](mdc:src/chains/interceptors/blockchain-provider.interceptor.ts) 處理提供者選擇
 9. **請求級提供者**：使用 [UseBlockchainProvider](mdc:src/chains/decorators/blockchain-provider.decorator.ts) 裝飾器設定提供者
 10. **錯誤處理**：使用 [ErrorCode](mdc:src/common/constants/error-codes.ts) 和自定義異常提供統一錯誤處理
+11. **價格擴展**：使用 [PriceableChainService](mdc:src/chains/services/core/priceable-chain.service.ts) 與 [PriceableEvmChainService](mdc:src/chains/services/core/priceable-evm-chain.service.ts) 抽象類為鏈服務提供 USD 價格增強功能
 
 ## 目錄結構
 
@@ -41,6 +42,8 @@ src/chains/
 │   │   ├── chain-service.factory.ts  # 鏈服務工廠
 │   │   ├── chain-router.service.ts   # 鏈路由服務
 │   │   ├── discovery.service.ts      # 裝飾器發現服務
+│   │   ├── priceable-chain.service.ts # 可報價鏈服務抽象類
+│   │   ├── priceable-evm-chain.service.ts # 可報價EVM鏈服務抽象類
 │   │   ├── blockchain.service.ts     # 區塊鏈服務
 │   │   └── request-context.service.ts # 請求上下文服務
 │   ├── ethereum/                   # 以太坊服務
@@ -103,6 +106,7 @@ src/chains/
 - **抽象基類更新**：移除 `isTestnet` 標誌，改用 `currentChainId` 屬性
 - **提供者工廠升級**：`ProviderFactory.getEvmProvider(chainId)` 基於 chainId 獲取提供者
 - **元數據增強**：`CHAIN_INFO_MAP` 擴展包含所有主網和測試網資訊
+- **價格能力擴展**：[PriceableEvmChainService](mdc:src/chains/services/core/priceable-evm-chain.service.ts) 在 EVM 服務中提供代幣 USD 價格計算功能
 
 ### 4. API 端點增強
 

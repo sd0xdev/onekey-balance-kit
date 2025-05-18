@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ChainService, ProviderAware } from '../../interfaces/chain-service.interface';
+import { TokenBalance } from '../../interfaces/token-balance.interface';
 
+/**
+ * 抽象鏈服務基類
+ * 定義所有鏈服務必須實現的基本功能
+ */
 @Injectable()
 export abstract class AbstractChainService implements ChainService, ProviderAware {
   protected readonly logger = new Logger(this.constructor.name);
@@ -66,4 +71,20 @@ export abstract class AbstractChainService implements ChainService, ProviderAwar
   protected logDebug(message: string): void {
     this.logger.debug(`[${this.getChainName()}] ${message}`);
   }
+
+  /**
+   * 獲取用戶在指定地址的代幣餘額
+   * @param address 用戶地址
+   * @param chainId 可選的鏈ID，如未指定則使用當前設定的鏈ID
+   * @param providerType 可選的提供者類型
+   * @returns 代幣餘額資訊
+   */
+  abstract getBalances(address: string, chainId?: number, providerType?: string): Promise<any>;
+
+  /**
+   * 驗證地址是否有效
+   * @param address 要驗證的地址
+   * @returns 地址是否有效
+   */
+  abstract validateAddress(address: string): boolean;
 }

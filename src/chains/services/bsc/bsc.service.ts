@@ -35,4 +35,9 @@ export class BscService extends AbstractEvmChainService {
   protected getDefaultChainId(): number {
     return 56; // BSC主網
   }
+
+  // 添加 validateAddress 方法
+  validateAddress(address: string): boolean {
+    return this.isValidAddress(address);
+  }
 }
