@@ -457,7 +457,7 @@ export class WebhookManagementService {
         this.logger.debug(`創建 webhook 參數檢查:
           - API Key: ${this.alchemyApiKey ? '已設置' : '未設置'}
           - Webhook URL: ${this.webhookUrl}
-          - Network: ${Network[chain] ? Network[chain] : '未識別'}
+          - Network: ${Network[networkId] ? Network[networkId] : '未識別'}
           - 默認監控地址: ${DEFAULT_MONITORED_ADDRESS}`);
 
         // 再次檢查是否已經有此鏈的webhook (防止在加鎖期間其他進程已創建)

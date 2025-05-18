@@ -82,7 +82,7 @@ export abstract class PriceableEvmChainService extends AbstractEvmChainService {
     } catch (error) {
       // 價格查詢失敗，不影響餘額查詢結果
       this.logWarn(`更新 ${this.getChainName()} 價格失敗: ${error.message}`);
-      return balances;
+      throw error;
     }
   }
 }

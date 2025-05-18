@@ -242,24 +242,23 @@ describe('EthereumService', () => {
 
     it('如果地址無效應該拋出錯誤', async () => {
       jest.spyOn(service, 'isValidAddress').mockReturnValueOnce(false);
-      await expect(service.getBalances('invalid-address')).rejects.toThrow();
+      await expect(service.getBalances('invalid-address')).rejects.toThrow(
+        'Invalid Ethereum address',
+      );
     });
 
-    it('如果提供者不支持應該使用默認實現', async () => {
+    it('如果提供者不支持應該拋出錯誤', async () => {
       // 模擬提供者拋出錯誤
       mockProviderFactory.getEvmProvider.mockImplementationOnce(() => {
         throw new Error('Provider not supported');
       });
 
-      // 呼叫服務方法 - 此處會使用預設實現
+      // 呼叫服務方法 - 應該拋出錯誤
       const address = '0x1234567890123456789012345678901234567890';
-      await service.getBalances(address);
-
-      // 驗證提供者呼叫
-      expect(mockProviderFactory.getEvmProvider).toHaveBeenCalled();
+      await expect(service.getBalances(address)).rejects.toThrow('Provider alchemy is not working');
     });
 
-    it('如果提供者拋出錯誤應該使用默認實現', async () => {
+    it('如果提供者拋出錯誤應該拋出錯誤', async () => {
       // 模擬提供者的 getBalances 方法拋出錯誤
       mockProviderFactory.getEvmProvider.mockImplementationOnce(() => ({
         isSupported: jest.fn().mockReturnValue(true),
@@ -267,12 +266,9 @@ describe('EthereumService', () => {
         getBalances: jest.fn().mockRejectedValueOnce(new Error('Provider error')),
       }));
 
-      // 呼叫服務方法
+      // 呼叫服務方法 - 應該拋出錯誤
       const address = '0x1234567890123456789012345678901234567890';
-      await service.getBalances(address);
-
-      // 驗證提供者呼叫
-      expect(mockProviderFactory.getEvmProvider).toHaveBeenCalled();
+      await expect(service.getBalances(address)).rejects.toThrow('Provider alchemy is not working');
     });
 
     it('在測試網上應該返回 usd=0', async () => {
