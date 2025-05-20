@@ -111,6 +111,7 @@ jobs:
           gcloud builds submit \
             --project=${{ env.PROJECT_ID }} \
             --config=cloudbuild.yaml \
+            --region=asia-east1 \
             --substitutions="_IMAGE_PATH=$FULL_IMAGE_PATH,_ENV=$_ENV,_MAX_INSTANCES=$_MAX_INSTANCES,_REGION=$REGION,_GIT_SHA=${{ github.sha }}"
 
       # --- 顯示部署 URL -----------------------------------------------------

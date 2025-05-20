@@ -7,7 +7,6 @@ substitutions:
   _GIT_SHA: 'latest' # 預設值，GitHub Action 會覆寫
 timeout: '1200s'
 options:
-  machineType: 'E2_HIGHCPU_8' # 免費額度同享
   logging: 'CLOUD_LOGGING_ONLY'
 steps:
   # --- 1) Build multi-arch image ------------------------------------------
